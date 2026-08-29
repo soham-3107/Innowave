@@ -1,0 +1,17 @@
+# Python Virtual Environment
+backend/venv/
+backend/__pycache__/
+backend/agents/__pycache__/
+backend/routing/__pycache__/
+*.pyc
+
+# Next.js Frontend Build
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Environment configurations and logs
+.env
+*.log
+.gemini/
+.system_generated/
