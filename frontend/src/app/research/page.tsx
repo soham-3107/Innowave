@@ -16,7 +16,6 @@ import {
   BrainCircuit, 
   Copy, 
   Check, 
-  FileJson, 
   FileSpreadsheet, 
   RefreshCw,
   Clock,
@@ -515,21 +514,6 @@ export default function ResearchModePage() {
     }
   }, [activeLocation]);
 
-  // Export as JSON
-  const handleExportJSON = () => {
-    if (!currentReport) return;
-    const jsonString = JSON.stringify(currentReport, null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `marine_research_${currentReport.region}_${new Date().toISOString().split("T")[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   // Export as CSV
   const handleExportCSV = () => {
     if (!currentReport) return;
@@ -763,17 +747,6 @@ Powered by INNOWAVE Multi-Agent Network (CMFRI Baseline Model Active)
 
         {/* Right: Export & Import Actions */}
         <div className="flex items-center gap-2">
-          {/* Export JSON Button */}
-          <button
-            onClick={handleExportJSON}
-            disabled={!currentReport}
-            className="flex items-center gap-1.5 bg-white hover:bg-stone-50 border border-stone-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-bold shadow-xs hover:border-blue-900/30 transition-all cursor-pointer disabled:opacity-40"
-            title="Download full session as JSON"
-          >
-            <FileJson className="h-4 w-4 text-blue-900" />
-            <span>Export JSON</span>
-          </button>
-
           {/* Export CSV Button */}
           <button
             onClick={handleExportCSV}
