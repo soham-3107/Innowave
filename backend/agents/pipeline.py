@@ -20,11 +20,11 @@ def extract_location(text: str) -> tuple[str, str, bool]:
     text_lower = text.lower()
     
     variations = {
-        "mumbai": ["mumbai", "bombay", "mumb", "mum", "मुम्बई", "मुंबई"],
-        "goa": ["goa", "panaji", "panjim", "गोवा", "पणजी"],
-        "kochi": ["kochi", "cochin", "cochy", "कोच्चि", "कोची"],
-        "chennai": ["chennai", "madras", "चेन्नई", "मद्रास"],
-        "veraval": ["veraval", "gujarat", "वेरावळ", "गुजरात"],
+        "mumbai": ["mumbai", "bombay", "mumb", "mum", "मुम्बई", "मुंबई", "मुंबईत"],
+        "goa": ["goa", "panaji", "panjim", "गोवा", "गोव्यात", "गोव्या", "पणजी"],
+        "kochi": ["kochi", "cochin", "cochy", "कोच्चि", "कोची", "कोचीन", "कोच्चीत"],
+        "chennai": ["chennai", "madras", "चेन्नई", "मद्रास", "चेन्नईत"],
+        "veraval": ["veraval", "gujarat", "वेरावळ", "वेरावळात", "गुजरात"],
         "vizag": ["vizag", "visakhapatnam", "विशाखापट्टनम", "विशाखापट्टणम", "वाईझॅग"]
     }
     
@@ -143,6 +143,8 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
     run_gis = intent in ["general", "safety", "gis"]
     run_risk = intent in ["general", "safety"]
 
+    species_info = region_data.get("species", {})
+
     if run_weather:
         trace.append({
             "agent": "Weather Agent",
@@ -156,10 +158,11 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
             "message": f"Ocean swap: Swells measured at **{wave_val}m**, current is **{region_data['ocean']['current_speed']} knots** at **{sst_val}°C**."
         })
     if run_satellite:
+        species_names_trace = ", ".join(species_info.get("primary", ["Mackerel", "Sardines"]))
         trace.append({
             "agent": "Satellite Agent",
             "status": "completed",
-            "message": f"Biochemical scan: Chlorophyll-a density calculated at **{chloro_val} mg/m³** ({region_data['satellite']['pfz_status']})."
+            "message": f"Biochemical scan: Chlorophyll-a density calculated at **{chloro_val} mg/m³** ({region_data['satellite']['pfz_status']}). Likely local species: **{species_names_trace}** (CMFRI Baseline)."
         })
     if run_tide:
         trace.append({
@@ -273,7 +276,15 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
         if intent == "tide":
             body = f"Next High Tide will peak at {region_data['tide']['high_tide_1']} and Low Tide is scheduled at {region_data['tide']['low_tide_1']}."
         elif intent == "fish":
-            body = f"Chlorophyll density is evaluated at {chloro_val} mg/m³ ({region_data['satellite']['pfz_status']}). Sea Surface Temperature is {sst_val}°C, representing high catch potential."
+            species_list_en = ", ".join(species_info.get("primary", ["Indian Mackerel", "Sardines"]))
+            body = (
+                f"Chlorophyll density is evaluated at {chloro_val} mg/m³ ({region_data['satellite']['pfz_status']}). "
+                f"Sea Surface Temperature is {sst_val}°C, representing favorable catch potential.\n\n"
+                f"🐟 **Likely Local Species (CMFRI Baseline)**: {species_list_en}.\n"
+                f"• Depth Contours: {species_info.get('depth_range', '15-45m Shelf Contours')}\n"
+                f"• Recommended Gear: {species_info.get('gear', 'Pelagic Drift Nets')}\n"
+                f"• Peak Catch Window: {species_info.get('catch_window', 'Early Morning')}"
+            )
         elif intent == "weather":
             body = f"Winds are at {wind_val} knots under {region_data['weather']['condition']} skies. Wave height swell is measuring {wave_val}m."
         elif intent == "gis":
@@ -298,7 +309,15 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
         if intent == "tide":
             body = f"ज्वार-भाटा विवरण: अगला उच्च ज्वार {region_data['tide']['high_tide_1']} पर और निम्न ज्वार {region_data['tide']['low_tide_1']} पर है।"
         elif intent == "fish":
-            body = f"उपग्रह के अनुसार यहाँ क्लोरोफिल स्तर {chloro_val} mg/m³ ({region_data['satellite']['pfz_status']}) है। मछली मिलने की संभावनाएं अच्छी हैं।"
+            species_list_hi = ", ".join(species_info.get("primary_hi", species_info.get("primary", ["बांगड़ा", "तारली"])))
+            body = (
+                f"उपग्रह के अनुसार यहाँ क्लोरोफिल स्तर {chloro_val} mg/m³ ({region_data['satellite']['pfz_status']}) है। "
+                f"मछली मिलने की संभावनाएं बहुत अच्छी हैं।\n\n"
+                f"🐟 **संभावित स्थानीय मछली प्रजातियाँ (CMFRI बेसलाइन)**: {species_list_hi}।\n"
+                f"• परिचालन गहराई: {species_info.get('depth_range_hi', '15-45 मीटर')}\n"
+                f"• अनुशंसित गियर: {species_info.get('gear_hi', 'ड्रिफ्ट नेट व गिलनेट')}\n"
+                f"• अनुकूल समय: {species_info.get('catch_window', 'सुबह 05:00 - 09:30 AM')}"
+            )
         elif intent == "weather":
             body = f"मौसम विवरण: हवा की गति {wind_val} समुद्री मील और लहरों की ऊंचाई {wave_val} मीटर है।"
         elif intent == "gis":
@@ -322,7 +341,15 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
         if intent == "tide":
             body = f"भरती-ओहोटीचे वेळापत्रक: पुढील भरती {region_data['tide']['high_tide_1']} वाजता आणि ओहोटी {region_data['tide']['low_tide_1']} वाजता असेल."
         elif intent == "fish":
-            body = f"मासेमारी संभाव्यता: उपग्रहानुसार क्लोरोफिल पातळी {chloro_val} mg/m³ असून हा परिसर संभाव्य मासेमारी क्षेत्र बनला आहे. सागरी पाण्याचे तापमान {sst_val}°C आहे."
+            species_list_mr = ", ".join(species_info.get("primary_mr", species_info.get("primary", ["बांगडा", "तारली"])))
+            body = (
+                f"मासेमारी संभाव्यता: उपग्रहानुसार क्लोरोफिल पातळी {chloro_val} mg/m³ असून हा परिसर संभाव्य मासेमारी क्षेत्र (PFZ) बनला आहे. "
+                f"सागरी पाण्याचे तापमान {sst_val}°C आहे.\n\n"
+                f"🐟 **स्थानिक पातळीवर आढळणारे संभाव्य मासे (CMFRI अभ्यास)**: {species_list_mr}.\n"
+                f"• कार्यरत खोली: {species_info.get('depth_range_mr', '15-45 मीटर')}\n"
+                f"• शिफारस केलेले जाळे: {species_info.get('gear_mr', 'ड्रिफ्ट नेट आणि गिलनेट')}\n"
+                f"• सर्वोत्तम मासेमारी वेळ: {species_info.get('catch_window', 'पहाटे 05:00 - 09:30 AM')}"
+            )
         elif intent == "weather":
             body = f"हवामानाविषयी: वाऱ्याचा वेग {wind_val} नॉट्स असून लाटांची उंची {wave_val} मीटर आहे."
         elif intent == "gis":

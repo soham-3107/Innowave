@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Compass, MessageSquare, BarChart3, Navigation, BrainCircuit } from "lucide-react";
+import { Compass, MessageSquare, BarChart3, Navigation, BrainCircuit, FileText } from "lucide-react";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -10,7 +10,8 @@ export default function Navbar() {
   const navLinks = [
     { href: "/", label: "Map Dashboard", icon: <Navigation className="h-4 w-4" /> },
     { href: "/copilot", label: "AI Copilot", icon: <MessageSquare className="h-4 w-4" /> },
-    { href: "/analytics", label: "Ocean Analytics", icon: <BarChart3 className="h-4 w-4" /> }
+    { href: "/analytics", label: "Ocean Analytics", icon: <BarChart3 className="h-4 w-4" /> },
+    { href: "/research", label: "Research Mode", icon: <FileText className="h-4 w-4" /> }
   ];
 
   return (

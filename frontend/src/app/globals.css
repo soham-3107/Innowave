@@ -95,6 +95,90 @@ body {
   opacity: 0.95 !important;
 }
 
+.custom-map-label-tide {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border: 1.5px solid #0284c7 !important; /* Sky blue border */
+  color: #0369a1 !important; /* Dark sky blue text */
+  font-weight: 700 !important;
+  font-size: 9px !important;
+  font-family: monospace !important;
+  border-radius: 6px !important;
+  padding: 1px 6px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  white-space: nowrap !important;
+  opacity: 0.95 !important;
+}
+
+.custom-map-label-weather {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border: 1.5px solid #ea580c !important; /* Orange/amber border */
+  color: #c2410c !important; /* Deep orange text */
+  font-weight: 700 !important;
+  font-size: 9px !important;
+  font-family: monospace !important;
+  border-radius: 6px !important;
+  padding: 1px 6px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  white-space: nowrap !important;
+  opacity: 0.95 !important;
+}
+
+.custom-map-label-halo {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border: 1.5px solid #0d9488 !important; /* Teal border */
+  color: #0f766e !important; /* Dark teal text */
+  font-weight: 700 !important;
+  font-size: 9px !important;
+  font-family: monospace !important;
+  border-radius: 6px !important;
+  padding: 1px 6px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  white-space: nowrap !important;
+  opacity: 0.95 !important;
+}
+
+.custom-map-label-depth {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border: 1.5px solid #0284c7 !important; /* Ocean blue border */
+  color: #0369a1 !important; /* Deep ocean text */
+  font-weight: 700 !important;
+  font-size: 9px !important;
+  font-family: monospace !important;
+  border-radius: 6px !important;
+  padding: 1px 6px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  white-space: nowrap !important;
+  opacity: 0.95 !important;
+}
+
+.custom-map-label-geo {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border: 1.5px solid #9333ea !important; /* Purple border */
+  color: #7e22ce !important; /* Dark purple text */
+  font-weight: 700 !important;
+  font-size: 9px !important;
+  font-family: monospace !important;
+  border-radius: 6px !important;
+  padding: 1px 6px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  white-space: nowrap !important;
+  opacity: 0.95 !important;
+}
+
+.custom-map-label-corridor {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border: 1.5px solid #d97706 !important; /* Amber gold border */
+  color: #b45309 !important; /* Dark amber text */
+  font-weight: 700 !important;
+  font-size: 9px !important;
+  font-family: monospace !important;
+  border-radius: 6px !important;
+  padding: 1px 6px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  white-space: nowrap !important;
+  opacity: 0.95 !important;
+}
+
 /* Pulse SOS Animation */
 @keyframes pulse-red {
   0% {

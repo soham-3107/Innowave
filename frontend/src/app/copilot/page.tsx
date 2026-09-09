@@ -14,8 +14,13 @@ import {
   MapPin, 
   ShieldAlert, 
   RefreshCw,
-  Users
+  Users,
+  Volume2,
+  Square,
+  VolumeX
 } from "lucide-react";
+
+import { REGION_SPECIES } from "@/data/speciesData";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -24,6 +29,60 @@ interface Message {
   text: string;
   timestamp: string;
 }
+
+// Detect response language from script and keywords
+const detectLanguage = (text: string): { langCode: string; label: string } => {
+  const hasDevanagari = /[\u0900-\u097F]/.test(text);
+  if (!hasDevanagari) {
+    return { langCode: "en-US", label: "English" };
+  }
+  const marathiClues = [
+    "आहे", "नाही", "का", "उद्या", "आज", "मासे", "वारा", "लाटा", "धोका", "सुरक्षित",
+    "येथे", "शेड्यूल", "स्थिती", "तपासणी", "सावध", "क्षेत्रात", "हवामान", "अंदाज",
+    "किमी", "गाठ", "वेळापत्रक", "किनारपट्टीवरील", "अहवाल"
+  ];
+  const isMarathi = marathiClues.some(word => text.includes(word));
+  return isMarathi 
+    ? { langCode: "mr-IN", label: "Marathi" } 
+    : { langCode: "hi-IN", label: "Hindi" };
+};
+
+// Clean text for natural speech synthesis playback
+const cleanTextForSpeech = (rawText: string) => {
+  return rawText
+    .replace(/[*#`_~]/g, "")
+    .replace(/^[•\-\*]\s+/gm, "")
+    .replace(/[\u{1F300}-\u{1FAFF}]|[\u{2600}-\u{27BF}]/gu, "")
+    .replace(/\bkts\b/gi, " knots")
+    .replace(/\bkm\/h\b/gi, " kilometers per hour")
+    .replace(/\bmg\/m³\b/gi, " milligrams per cubic meter")
+    .replace(/\(Client Fallback Active\)/gi, "")
+    .trim();
+};
+
+// Best matching voice resolver with cross-language phonetic fallback
+const getBestVoice = (targetLang: string): SpeechSynthesisVoice | null => {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices || voices.length === 0) return null;
+
+  // 1. Exact match (e.g. "mr-IN", "hi-IN", "en-US")
+  let match = voices.find(v => v.lang.toLowerCase() === targetLang.toLowerCase());
+  if (match) return match;
+
+  // 2. Prefix match (e.g. "mr", "hi", "en")
+  const prefix = targetLang.split("-")[0].toLowerCase();
+  match = voices.find(v => v.lang.toLowerCase().startsWith(prefix));
+  if (match) return match;
+
+  // 3. Marathi Devanagari fallback to Hindi voice if Marathi voice is not installed
+  if (prefix === "mr") {
+    const hiVoice = voices.find(v => v.lang.toLowerCase().startsWith("hi"));
+    if (hiVoice) return hiVoice;
+  }
+
+  return null;
+};
 
 // Telemetry database for client fallback simulation
 const LOCAL_MOCK_DATA: Record<string, any> = {
@@ -81,6 +140,17 @@ const LOCAL_REPORTS = [
 
 export default function CopilotPage() {
   const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get("q");
+      if (q) {
+        setQuery(q);
+      }
+    }
+  }, []);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: "innowave",
@@ -104,13 +174,90 @@ export default function CopilotPage() {
     explanation: string;
   } | null>(null);
 
+  // Read Aloud (TTS) state
+  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
+
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Load and cache SpeechSynthesis voices
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+    const loadVoices = () => {
+      window.speechSynthesis.getVoices();
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    return () => {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  // Toggle Read Aloud for a given message
+  const toggleReadAloud = (index: number, text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      alert("Text-to-speech is not supported in this browser. Please use Chrome, Edge, or Safari.");
+      return;
+    }
+
+    // Stop if already speaking this message
+    if (speakingIndex === index) {
+      window.speechSynthesis.cancel();
+      setSpeakingIndex(null);
+      return;
+    }
+
+    // Cancel any previous speech
+    window.speechSynthesis.cancel();
+
+    // Stop mic listening if active so there is no audio loop
+    if (isListening) {
+      setIsListening(false);
+    }
+
+    const { langCode } = detectLanguage(text);
+    const cleanedText = cleanTextForSpeech(text);
+    const utterance = new SpeechSynthesisUtterance(cleanedText);
+    utterance.lang = langCode;
+
+    const voice = getBestVoice(langCode);
+    if (voice) {
+      utterance.voice = voice;
+    }
+
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+
+    utterance.onend = () => {
+      setSpeakingIndex(null);
+    };
+
+    utterance.onerror = (e) => {
+      if (e.error !== "canceled" && e.error !== "interrupted") {
+        console.warn("SpeechSynthesis error:", e);
+      }
+      setSpeakingIndex(null);
+    };
+
+    setSpeakingIndex(index);
+    window.speechSynthesis.speak(utterance);
+  };
+
   const startSpeechRecognition = () => {
+    // Interlock: cancel any playing speech so the mic doesn't capture speaker audio
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingIndex(null);
+    }
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert("Speech recognition is not supported in this browser. Please use Chrome or Edge.");
@@ -148,12 +295,12 @@ export default function CopilotPage() {
     let is_explicit_loc = false;
     
     const locationVariations: Record<string, string[]> = {
-      mumbai: ["mumbai", "bombay", "mumb", "mum", "मुम्बई", "मुंबई"],
-      goa: ["goa", "panaji", "panjim", "गोवा", "पणजी"],
-      kochi: ["kochi", "cochin", "कोच्चि", "कोची"],
-      chennai: ["chennai", "madras", "चेन्नई", "मद्रास"],
-      veraval: ["veraval", "gujarat", "वेरावळ", "गुजरात"],
-      vizag: ["vizag", "visakhapatnam", "विशाखापट्टनम", "विशाखापट्टणम"]
+      mumbai: ["mumbai", "bombay", "mumb", "mum", "मुम्बई", "मुंबई", "मुंबईत"],
+      goa: ["goa", "panaji", "panjim", "गोवा", "गोव्यात", "गोव्या", "पणजी"],
+      kochi: ["kochi", "cochin", "कोच्चि", "कोची", "कोचीन", "कोच्चीत"],
+      chennai: ["chennai", "madras", "चेन्नई", "मद्रास", "चेन्नईत"],
+      veraval: ["veraval", "gujarat", "वेरावळ", "वेरावळात", "गुजरात"],
+      vizag: ["vizag", "visakhapatnam", "विशाखापट्टनम", "विशाखापट्टणम", "वाईझॅग"]
     };
 
     for (const [key, words] of Object.entries(locationVariations)) {
@@ -313,6 +460,8 @@ export default function CopilotPage() {
     const time_suffix_hi = time_context ? `**${time_context}** के लिए` : "";
     const time_suffix_mr = time_context ? `**${time_context}** साठी` : "";
 
+    const speciesObj = REGION_SPECIES[targetKey] || REGION_SPECIES.mumbai;
+
     if (detectedLang === "en") {
       const intro = is_explicit_loc 
         ? `Regarding your inquiry about ${d.name} ${time_suffix_en}:`
@@ -322,22 +471,22 @@ export default function CopilotPage() {
       if (intent === "tide") {
         body = `Next High Tide will peak at ${d.tide_ht} and Low Tide is scheduled at ${d.tide_lt}.`;
       } else if (intent === "fish") {
-        body = `Chlorophyll density is evaluated at ${chloro_val} mg/m³ (${d.chloro >= 4.5 ? "High PFZ" : "Medium/Low PFZ"}). Sea Surface Temperature is ${sst_val}°C, representing high catch potential.`;
+        body = `Chlorophyll density is evaluated at ${chloro_val} mg/m³ (${d.chloro >= 4.5 ? "High PFZ" : "Medium/Low PFZ"}). Sea Surface Temperature is ${sst_val}°C, representing high catch potential.\n\n🐟 **Likely Local Species (CMFRI Baseline)**: ${speciesObj.primarySpecies.join(", ")}.\n• Bathymetric Operating Depth: ${speciesObj.depthRangeMeters}\n• Recommended Gear: ${speciesObj.recommendedGear}\n• Peak Catch Window: ${speciesObj.catchWindow}`;
       } else if (intent === "weather") {
         body = `Winds are clocked at ${wind_val} knots. Wave height swell is measuring ${wave_val}m.`;
       } else if (intent === "gis") {
         body = `The vessel is safely ${d.imbl} km from the IMBL limit. Local restricted regions include ${d.restricted_zone} (${d.restricted_dist} km away).`;
       } else if (intent === "safety") {
-        body = `The safety rating is calculated as ${safety_level} (Danger Index: ${final_danger_score}/105). Wave heights are at ${wave_val}m and wind speeds are ${wind_val} knots.`;
+        body = `The safety rating is calculated as ${safety_level} (Danger Index: ${final_danger_score}/100). Wave heights are at ${wave_val}m and wind speeds are ${wind_val} knots.`;
       } else {
-        body = `Safety rating is ${safety_level} (Wave: ${wave_val}m, Wind: ${wind_val} knots). Chlorophyll levels are at ${chloro_val} mg/m³.`;
+        body = `Safety rating is ${safety_level} (Wave: ${wave_val}m, Wind: ${wind_val} knots). Chlorophyll levels are at ${chloro_val} mg/m³. Likely local species: ${speciesObj.primarySpecies.slice(0, 3).join(", ")}.`;
       }
 
       if (activeReports.length > 0) {
         body += `\n\n👥 **COMMUNITY LOGS**: ${activeReports.length} local reports verify this area. Latest alert: "${activeReports[0].text}" (${activeReports[0].timestamp}).`;
       }
 
-      finalAnswer = `${intro}\n\n{body}`;
+      finalAnswer = `${intro}\n\n${body}`;
 
     } else if (detectedLang === "hi") {
       const intro = is_explicit_loc 
@@ -348,22 +497,22 @@ export default function CopilotPage() {
       if (intent === "tide") {
         body = `ज्वार-भाटा विवरण: अगला उच्च ज्वार ${d.tide_ht} पर और निम्न ज्वार ${d.tide_lt} पर है।`;
       } else if (intent === "fish") {
-        body = `उपग्रह के अनुसार यहाँ क्लोरोफिल स्तर ${chloro_val} mg/m³ है। मछली मिलने की संभावनाएं अच्छी हैं।`;
+        body = `उपग्रह के अनुसार यहाँ क्लोरोफिल स्तर ${chloro_val} mg/m³ है। मछली मिलने की संभावनाएं बहुत अच्छी हैं।\n\n🐟 **संभावित स्थानीय प्रजातियाँ (CMFRI डेटा)**: ${speciesObj.primarySpecies.join(", ")}।\n• परिचालन गहराई: ${speciesObj.depthRangeMeters}\n• अनुशंसित गियर: ${speciesObj.recommendedGear}\n• अनुकूल समय: ${speciesObj.catchWindow}`;
       } else if (intent === "weather") {
         body = `मौसम विवरण: हवा की गति ${wind_val} समुद्री मील और लहरों की ऊंचाई ${wave_val} मीटर है।`;
       } else if (intent === "gis") {
-        body = `आप अंतर्राष्ट्रीय सीमा से {d.imbl} किमी दूर हैं। स्थानीय प्रतिबंधित क्षेत्र {d.restricted_zone} है।`;
+        body = `आप अंतर्राष्ट्रीय सीमा से ${d.imbl} किमी दूर हैं। स्थानीय प्रतिबंधित क्षेत्र ${d.restricted_zone} है।`;
       } else if (intent === "safety") {
-        body = `सुरक्षा श्रेणी ${safety_level} (जोखिम स्तर: {final_danger_score}/100) है। लहर की ऊंचाई ${wave_val} मीटर और हवा की गति {wind_val} समुद्री मील है।`;
+        body = `सुरक्षा श्रेणी ${safety_level} (जोखिम स्तर: ${final_danger_score}/100) है। लहर की ऊंचाई ${wave_val} मीटर और हवा की गति ${wind_val} समुद्री मील है।`;
       } else {
-        body = `सुरक्षा स्तर {safety_level} है। वर्तमान लहर की ऊंचाई {wave_val} मीटर और हवा की गति {wind_val} समुद्री मील है। क्लोरोफिल स्तर {chloro_val} mg/m³ है।`;
+        body = `सुरक्षा स्तर ${safety_level} है। वर्तमान लहर की ऊंचाई ${wave_val} मीटर और हवा की गति ${wind_val} समुद्री मील है। क्लोरोफिल स्तर ${chloro_val} mg/m³ है।`;
       }
 
       if (activeReports.length > 0) {
-        body += `\n\n👥 **स्थानीय मछुआरा रिपोर्ट**: यहाँ {activeReports.length} हालिया रिपोर्ट मिली हैं। ताज़ा जानकारी: "${activeReports[0].text}" (${activeReports[0].timestamp}).`;
+        body += `\n\n👥 **स्थानीय मछुआरा रिपोर्ट**: यहाँ ${activeReports.length} हालिया रिपोर्ट मिली हैं। ताज़ा जानकारी: "${activeReports[0].text}" (${activeReports[0].timestamp}).`;
       }
 
-      finalAnswer = `${intro}\n\n{body}`;
+      finalAnswer = `${intro}\n\n${body}`;
 
     } else { // Marathi (mr)
       const intro = is_explicit_loc 
@@ -374,22 +523,22 @@ export default function CopilotPage() {
       if (intent === "tide") {
         body = `भरती-ओहोटीचे वेळापत्रक: पुढील भरती ${d.tide_ht} वाजता आणि ओहोटी ${d.tide_lt} वाजता असेल.`;
       } else if (intent === "fish") {
-        body = `मासेमारी संभाव्यता: उपग्रहानुसार क्लोरोफिल पातळी ${chloro_val} mg/m³ असून हा परिसर संभाव्य मासेमारी क्षेत्र बनला आहे. सागरी पाण्याचे तापमान {sst_val}°C आहे.`;
+        body = `मासेमारी संभाव्यता: उपग्रहानुसार क्लोरोफिल पातळी ${chloro_val} mg/m³ असून हा परिसर संभाव्य मासेमारी क्षेत्र (PFZ) बनला आहे. सागरी पाण्याचे तापमान ${sst_val}°C आहे.\n\n🐟 **स्थानिक संभाव्य मासे (CMFRI नोंद)**: ${speciesObj.primarySpecies.join(", ")}.\n• कार्यरत खोली: ${speciesObj.depthRangeMeters}\n• शिफारस केलेले जाळे: ${speciesObj.recommendedGear}\n• सर्वोत्तम वेळ: ${speciesObj.catchWindow}`;
       } else if (intent === "weather") {
         body = `हवामानाविषयी: वाऱ्याचा वेग ${wind_val} नॉट्स असून लाटांची उंची ${wave_val} मीटर आहे.`;
       } else if (intent === "gis") {
-        body = `आन्तरराष्ट्रीय सागरी सीमेपासूनचे अंतर {d.imbl} किमी असून आपण सुरक्षित भागात आहात.`;
+        body = `आन्तरराष्ट्रीय सागरी सीमेपासूनचे अंतर ${d.imbl} किमी असून आपण सुरक्षित भागात आहात.`;
       } else if (intent === "safety") {
-        body = `सुरक्षा पातळी {safety_level} (जोखिम निर्देशांक: {final_danger_score}/100) आहे. लाटांची उंची {wave_val} मी आणि वारे {d.wind} नॉट्स आहेत.`;
+        body = `सुरक्षा पातळी ${safety_level} (जोखिम निर्देशांक: ${final_danger_score}/100) आहे. लाटांची उंची ${wave_val} मी आणि वारे ${wind_val} नॉट्स आहेत.`;
       } else {
-        body = `आज सुरक्षा निर्देशांक {safety_level} आहे. लाटा {wave_val} मी आणि वारे {d.wind} नॉट्स आहेत. क्लोरोफिल पातळी {chloro_val} mg/m³ आहे.`;
+        body = `आज सुरक्षा निर्देशांक ${safety_level} आहे. लाटा ${wave_val} मी आणि वारे ${wind_val} नॉट्स आहेत. क्लोरोफिल पातळी ${chloro_val} mg/m³ आहे.`;
       }
 
       if (activeReports.length > 0) {
-        body += `\n\n👥 **मच्छीमार समुदाय अहवाल**: या भागात {activeReports.length} समुदाय नोंदी आहेत. ताजी नोंद: "${activeReports[0].text}" (${activeReports[0].timestamp}).`;
+        body += `\n\n👥 **मच्छीमार समुदाय अहवाल**: या भागात ${activeReports.length} समुदाय नोंदी आहेत. ताजी नोंद: "${activeReports[0].text}" (${activeReports[0].timestamp}).`;
       }
 
-      finalAnswer = `${intro}\n\n{body}`;
+      finalAnswer = `${intro}\n\n${body}`;
     }
 
     return {
@@ -409,6 +558,12 @@ export default function CopilotPage() {
   const handleSendMessage = async (textToSend?: string) => {
     const messageText = textToSend || query;
     if (!messageText.trim()) return;
+
+    // Cancel any playing speech so audio doesn't overlap
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingIndex(null);
+    }
 
     setMessages(prev => [...prev, {
       sender: "user",
@@ -532,24 +687,70 @@ export default function CopilotPage() {
 
           {/* Quick Prompts Panel */}
           <div className="p-3 bg-stone-50 border-b border-stone-150 flex flex-wrap gap-2 text-xs">
-            <button 
-              onClick={() => handleSendMessage("Where is the best fish zone in Goa?")}
-              className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold"
-            >
-              Goa Fish PFZ
-            </button>
-            <button 
-              onClick={() => handleSendMessage("What is the high tide schedule in Kochi?")}
-              className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold"
-            >
-              Kochi Tides
-            </button>
-            <button 
-              onClick={() => handleSendMessage("Goa border warnings and weather safety")}
-              className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold"
-            >
-              Goa Safety
-            </button>
+            {language === "hi" ? (
+              <>
+                <button 
+                  onClick={() => handleSendMessage("गोवा में सबसे अच्छा मछली क्षेत्र कहाँ है?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  गोवा मछली क्षेत्र (PFZ)
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("कोच्चि में उच्च ज्वार (High Tide) का समय क्या है?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  कोच्चि टाइड्स
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("मुंबई मौसम और समुद्री सुरक्षा जानकारी")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  मुंबई सुरक्षा
+                </button>
+              </>
+            ) : language === "mr" ? (
+              <>
+                <button 
+                  onClick={() => handleSendMessage("गोव्यात सर्वोत्तम मासेमारी क्षेत्र कुठे आहे?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  गोवा मासेमारी (PFZ)
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("कोची भरतीचे वेळापत्रक काय आहे?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  कोची भरती-ओहोटी
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("मुंबई हवामान आणि सुरक्षा स्थिती")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  मुंबई सुरक्षा
+                </button>
+              </>
+            ) : (
+              <>
+                <button 
+                  onClick={() => handleSendMessage("Where is the best fish zone in Goa?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  Goa Fish PFZ
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("What is the high tide schedule in Kochi?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  Kochi Tides
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("Goa border warnings and weather safety")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  Goa Safety
+                </button>
+              </>
+            )}
           </div>
 
           {/* Messages Area */}
@@ -568,7 +769,37 @@ export default function CopilotPage() {
                 >
                   <p className="whitespace-pre-line text-xs font-semibold leading-relaxed">{msg.text}</p>
                 </div>
-                <span className="text-[9px] text-slate-400 mt-1 font-mono">{msg.timestamp}</span>
+
+                {/* Message Meta: Timestamp and Read Aloud Action */}
+                <div className={`flex items-center gap-2 mt-1 px-1 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+                  <span className="text-[9px] text-slate-400 font-mono">{msg.timestamp}</span>
+
+                  {msg.sender === "innowave" && (
+                    <button
+                      type="button"
+                      onClick={() => toggleReadAloud(i, msg.text)}
+                      className={`flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-lg border transition-all cursor-pointer ${
+                        speakingIndex === i
+                          ? "bg-red-50 text-red-700 border-red-200 shadow-2xs font-bold ring-1 ring-red-300 animate-pulse"
+                          : "bg-white text-slate-600 border-stone-200 hover:text-blue-900 hover:border-blue-300 shadow-2xs"
+                      }`}
+                      title={speakingIndex === i ? "Stop playback" : `Read aloud in ${detectLanguage(msg.text).label}`}
+                      aria-label={speakingIndex === i ? "Stop playback" : "Read aloud"}
+                    >
+                      {speakingIndex === i ? (
+                        <>
+                          <Square className="h-2.5 w-2.5 fill-current" />
+                          <span>Stop</span>
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="h-3 w-3 text-blue-900" />
+                          <span>Read Aloud</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
             {loading && (

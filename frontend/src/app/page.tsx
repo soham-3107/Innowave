@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import dynamic from "next/dynamic";
-import { Compass, Navigation, ShieldAlert, AlertTriangle, RefreshCw, Anchor, MessageSquare, AlertCircle } from "lucide-react";
+import { Compass, Navigation, ShieldAlert, AlertTriangle, RefreshCw, Anchor, MessageSquare, AlertCircle, FileText, Fish } from "lucide-react";
+import { REGION_SPECIES } from "@/data/speciesData";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -37,13 +39,30 @@ const REGION_RISK_SCORES: Record<string, number> = {
 };
 
 export default function HomeDashboard() {
+  const alertsRef = useRef<HTMLDivElement>(null);
+  const speciesRef = useRef<HTMLDivElement>(null);
+
+  const [selectedZone, setSelectedZone] = useState<any>(null);
+  const [highlightedSpecies, setHighlightedSpecies] = useState(false);
+
   const [pfzs, setPfzs] = useState<any[]>([]);
   const [hazards, setHazards] = useState<any[]>([]);
+  const [tideZones, setTideZones] = useState<any[]>([]);
   const [vesselPath, setVesselPath] = useState<[number, number][]>([]);
   const [vesselIndex, setVesselIndex] = useState(0);
   const [routes, setRoutes] = useState<any>(null);
   const [dynamicAlerts, setDynamicAlerts] = useState<any[]>([]);
   const [activeLocation, setActiveLocation] = useState("mumbai");
+
+  // Chart Layers state synchronized with top toolbar Geofence control (default: all OFF)
+  const [mapLayers, setMapLayers] = useState({
+    fishingSuitability: false,
+    fishingGrounds: false,
+    weatherSeaState: false,
+    seaDepthContours: false,
+    geologicalBorders: false,
+    safetyTrafficAlerts: false
+  });
   
   // Community Reports states
   const [reports, setReports] = useState<any[]>([]);
@@ -65,10 +84,61 @@ export default function HomeDashboard() {
 
   useEffect(() => {
     // Read shared location context
-    const saved = localStorage.getItem("innowave-active-location");
-    if (saved && REGION_NAMES[saved]) {
-      setActiveLocation(saved);
-    }
+    const updateLocationFromStorage = () => {
+      const saved = localStorage.getItem("innowave-active-location") || localStorage.getItem("orca-active-location");
+      if (saved && REGION_NAMES[saved]) {
+        setActiveLocation(saved);
+      }
+    };
+
+    updateLocationFromStorage();
+
+    const handleCustomLocation = (e: any) => {
+      if (e.detail && REGION_NAMES[e.detail]) {
+        setActiveLocation(e.detail);
+      } else {
+        updateLocationFromStorage();
+      }
+    };
+
+    window.addEventListener("orca-location-changed", handleCustomLocation);
+    window.addEventListener("storage", updateLocationFromStorage);
+    return () => {
+      window.removeEventListener("orca-location-changed", handleCustomLocation);
+      window.removeEventListener("storage", updateLocationFromStorage);
+    };
+  }, []);
+
+  // Reset selectedZone when active location changes so it shows the new region's species
+  useEffect(() => {
+    setSelectedZone(null);
+  }, [activeLocation]);
+
+  // Handle focus search parameters from sidebar
+  useEffect(() => {
+    const checkFocus = () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const focus = params.get("focus");
+        if (focus === "alerts") {
+          setTimeout(() => {
+            alertsRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 200);
+        } else if (focus === "species") {
+          setTimeout(() => {
+            speciesRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+            setHighlightedSpecies(true);
+            setTimeout(() => setHighlightedSpecies(false), 3000);
+          }, 200);
+        } else if (focus === "reports") {
+          setIsReportModalOpen(true);
+        }
+      }
+    };
+
+    checkFocus();
+    window.addEventListener("popstate", checkFocus);
+    return () => window.removeEventListener("popstate", checkFocus);
   }, []);
 
   useEffect(() => {
@@ -78,6 +148,7 @@ export default function HomeDashboard() {
         const data = await res.json();
         setPfzs(data.pfzs || []);
         setHazards(data.hazards || []);
+        setTideZones(data.tide_zones || []);
         setVesselPath(data.vessel_path || []);
         setReports(data.reports || []);
       } catch (err) {
@@ -90,6 +161,11 @@ export default function HomeDashboard() {
         setHazards([
           { id: "naval-mumbai", name: "Naval Dockyard Restricted Zone", center: [18.928, 72.846], radius_meters: 3000, severity: "RESTRICTED", description: "Naval prohibited area. Commercial fishing restricted.", type: "military" },
           { id: "storm-bypass-mumbai", name: "Active Squall Area (Mumbai Bypass Target)", center: [18.82, 72.62], radius_meters: 15000, severity: "DANGER", description: "Storm squall advisory.", type: "storm" }
+        ]);
+        setTideZones([
+          { id: "tide-mumbai", name: "Mumbai Harbor Tidal Station", center: [18.93, 72.85], radius_meters: 6000, high_tide: "05:42 AM (3.8m)", low_tide: "11:58 AM (1.1m)", current_speed: "1.2 knots (Ebb)", type: "tide" },
+          { id: "tide-goa", name: "Mormugao Bay Tidal Observatory", center: [15.41, 73.80], radius_meters: 5000, high_tide: "06:15 AM (1.8m)", low_tide: "12:20 PM (0.3m)", current_speed: "0.7 knots (Flood)", type: "tide" },
+          { id: "tide-kochi", name: "Cochin Inlet Tidal Rip Zone", center: [9.97, 76.22], radius_meters: 6500, high_tide: "04:12 AM (1.4m)", low_tide: "10:30 AM (0.4m)", current_speed: "2.1 knots (Turbulent)", type: "tide" }
         ]);
         setVesselPath([
           [18.940, 72.825],
@@ -275,6 +351,7 @@ export default function HomeDashboard() {
   const currentLat = vesselPath[vesselIndex]?.[0] || 18.95;
   const currentLon = vesselPath[vesselIndex]?.[1] || 72.80;
   const currentRisk = REGION_RISK_SCORES[activeLocation] || 18;
+  const activeSpecies = REGION_SPECIES[activeLocation] || REGION_SPECIES.mumbai;
 
   return (
     <div className="p-6 max-w-7xl mx-auto flex flex-col gap-6 text-slate-800">
@@ -295,6 +372,15 @@ export default function HomeDashboard() {
             </p>
           </div>
         </div>
+
+        {/* Research Mode (Dossier) Button */}
+        <Link
+          href="/research"
+          className="flex items-center gap-2 bg-blue-900 hover:bg-blue-850 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-xs hover:shadow transition-all self-start sm:self-auto flex-shrink-0 cursor-pointer"
+        >
+          <FileText className="h-4 w-4 text-amber-300" />
+          <span>Research Mode (Dossier)</span>
+        </Link>
       </div>
 
       {/* Main Grid */}
@@ -302,25 +388,75 @@ export default function HomeDashboard() {
         
         {/* Map View - 8 cols */}
         <div className="lg:col-span-8 bg-white border border-stone-200 p-4 rounded-2xl shadow-sm flex flex-col gap-3 relative">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h3 className="font-bold text-blue-950 flex items-center gap-2 text-sm md:text-base">
               <Anchor className="text-blue-900 h-5 w-5" />
               Live Marine Telemetry & Radar Overlays
             </h3>
-            {routes && (
-              <button 
-                onClick={() => setRoutes(null)}
-                className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-xs py-1 px-3 rounded-lg font-semibold transition duration-150"
+
+            {/* Top Toolbar Controls */}
+            <div className="flex items-center gap-2">
+              {/* Species Layer Toggle */}
+              <button
+                onClick={() => {
+                  const newState = !(mapLayers.fishingSuitability || mapLayers.fishingGrounds);
+                  setMapLayers(prev => ({
+                    ...prev,
+                    fishingSuitability: newState,
+                    fishingGrounds: newState
+                  }));
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all duration-200 border cursor-pointer ${
+                  mapLayers.fishingSuitability || mapLayers.fishingGrounds
+                    ? "bg-teal-100 text-teal-900 border-teal-300 shadow-sm ring-2 ring-teal-400/40"
+                    : "bg-stone-50 text-slate-600 border-stone-200 hover:bg-stone-100"
+                }`}
+                title="Toggle Likely Local Species & Fishing Zone Layers"
               >
-                Clear Route Layer
+                <Fish className={`h-3.5 w-3.5 ${mapLayers.fishingSuitability || mapLayers.fishingGrounds ? "text-teal-700 animate-pulse" : "text-slate-400"}`} />
+                <span>Species Layer</span>
+                {(mapLayers.fishingSuitability || mapLayers.fishingGrounds) && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-teal-600 ml-0.5" />
+                )}
               </button>
-            )}
+
+              <button
+                onClick={() => {
+                  setMapLayers(prev => ({
+                    ...prev,
+                    safetyTrafficAlerts: !prev.safetyTrafficAlerts
+                  }));
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all duration-200 border cursor-pointer ${
+                  mapLayers.safetyTrafficAlerts
+                    ? "bg-amber-100 text-amber-900 border-amber-300 shadow-sm ring-2 ring-amber-400/40"
+                    : "bg-stone-50 text-slate-600 border-stone-200 hover:bg-stone-100"
+                }`}
+                title="Toggle Safety Geofence & Traffic Corridor"
+              >
+                <ShieldAlert className={`h-3.5 w-3.5 ${mapLayers.safetyTrafficAlerts ? "text-amber-700 animate-pulse" : "text-slate-400"}`} />
+                <span>Geofence</span>
+                {mapLayers.safetyTrafficAlerts && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-600 animate-ping ml-0.5" />
+                )}
+              </button>
+
+              {routes && (
+                <button 
+                  onClick={() => setRoutes(null)}
+                  className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-xs py-1 px-3 rounded-lg font-semibold transition duration-150 cursor-pointer"
+                >
+                  Clear Route Layer
+                </button>
+              )}
+            </div>
           </div>
           
           <div className="h-[480px] relative">
             <MapComponent
               pfzs={pfzs}
               hazards={hazards}
+              tideZones={tideZones}
               vesselPath={vesselPath}
               vesselIndex={vesselIndex}
               routes={routes}
@@ -328,32 +464,22 @@ export default function HomeDashboard() {
               activeLocation={activeLocation}
               reports={reports}
               onMapClick={isSelectingLocation ? handleMapClickSelection : undefined}
+              layersState={mapLayers}
+              onToggleLayer={(key) => setMapLayers(prev => ({ ...prev, [key]: !prev[key] }))}
+              onSetLayersState={setMapLayers}
+              onSelectZone={(zone) => setSelectedZone(zone)}
             />
 
-            {/* Floating button on the bottom left (opposite of coordinates tracker widget) */}
-            <button
-              onClick={() => {
-                setIsReportModalOpen(true);
-                setIsSelectingLocation(false);
-              }}
-              className="absolute bottom-4 left-4 bg-indigo-900 hover:bg-indigo-850 text-white p-3.5 rounded-full shadow-lg z-20 hover:scale-105 hover:rotate-90 transition-all duration-300 border border-indigo-750 flex items-center justify-center"
-              title="Pin a Community Crowdsourced Report"
-            >
-              <svg xmlns="http://www.w3.org/2050/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-            </button>
-
-            {/* Floating SOS button bottom-right (above coords tracker widget) */}
-            <div className="absolute bottom-20 right-4 z-20 flex flex-col items-end gap-2 text-slate-800">
+            {/* Bottom-Left Floating Action Stack: SOS Button directly above Community Report (+) Button */}
+            <div className="absolute bottom-4 left-4 z-20 flex flex-col items-center gap-2.5">
+              {/* SOS Active Badge */}
               {isSosActive && (
-                <div className="bg-red-600 text-white font-extrabold px-3 py-1.5 rounded-xl text-[10px] uppercase tracking-wider shadow-lg flex items-center gap-2 border border-red-700 font-mono">
-                  <span className="h-2 w-2 rounded-full bg-white animate-ping"></span>
+                <div className="bg-red-600 text-white font-extrabold px-2.5 py-1 rounded-lg text-[9px] uppercase tracking-wider shadow-lg flex items-center gap-1.5 border border-red-700 font-mono whitespace-nowrap animate-pulse">
+                  <span className="h-1.5 w-1.5 rounded-full bg-white animate-ping"></span>
                   SOS Active
                   <button 
                     onClick={resetSosSignal}
-                    className="ml-1 hover:text-red-200 font-extrabold text-[12px]"
+                    className="ml-1 hover:text-red-200 font-extrabold text-[11px]"
                     title="Dismiss distress alert state"
                   >
                     ✕
@@ -361,29 +487,100 @@ export default function HomeDashboard() {
                 </div>
               )}
               
+              {/* SOS Button */}
               <button
                 onClick={() => {
                   if (!isSosActive) {
                     setSosStep("confirm");
                     setIsSosModalOpen(true);
                   } else {
-                    setIsSosModalOpen(true); // Open success status command directly
+                    setIsSosModalOpen(true);
                   }
                 }}
-                className={`h-14 w-14 rounded-full flex items-center justify-center font-black text-xs border-4 shadow-xl transition-all duration-300 select-none ${
+                className={`h-12 w-12 rounded-full flex items-center justify-center font-black text-xs border-2 shadow-xl transition-all duration-300 select-none ${
                   isSosActive 
                     ? "bg-red-950 border-red-800 text-red-200 cursor-pointer animate-pulse" 
-                    : "bg-red-600 hover:bg-red-750 border-white text-white hover:scale-105 active:scale-95 cursor-pointer"
+                    : "bg-red-600 hover:bg-red-700 border-white text-white hover:scale-105 active:scale-95 cursor-pointer"
                 }`}
                 style={{
                   animation: !isSosActive ? "pulse-red 2s infinite" : undefined
                 }}
+                title="Trigger Emergency Distress SOS"
               >
                 SOS
+              </button>
+
+              {/* Community Reports (+) Button */}
+              <button
+                onClick={() => {
+                  setIsReportModalOpen(true);
+                  setIsSelectingLocation(false);
+                }}
+                className="h-12 w-12 bg-indigo-900 hover:bg-indigo-850 text-white rounded-full shadow-lg hover:scale-105 hover:rotate-90 transition-all duration-300 border-2 border-white flex items-center justify-center"
+                title="Pin a Community Crowdsourced Report"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
               </button>
             </div>
           </div>
           
+          {/* Auto-Summary: Today's Snapshot Card on the Marine Map */}
+          <div className="bg-[#FAF8F5] border border-stone-200/90 rounded-2xl p-4 flex flex-col gap-2.5 shadow-xs animate-fade-in">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200/70 pb-2">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-teal-500 animate-pulse" />
+                <h4 className="font-extrabold text-blue-950 text-xs uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  Today's Snapshot • {REGION_NAMES[activeLocation]}
+                </h4>
+              </div>
+              <div className="flex items-center gap-2 font-mono text-[10.5px]">
+                <span className="text-slate-500">
+                  Risk Danger Index: <strong className={currentRisk < 40 ? "text-emerald-700" : currentRisk < 70 ? "text-amber-700" : "text-red-700"}>{currentRisk}/100</strong>
+                </span>
+                <span className="bg-teal-50 text-teal-900 border border-teal-200 px-2 py-0.5 rounded font-bold text-[10px]">
+                  {activeSpecies.cmfriStatus}
+                </span>
+              </div>
+            </div>
+
+            {/* Likely Catch Line */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-bold text-teal-950 flex items-center gap-1 font-mono text-[11px] uppercase tracking-wider flex-shrink-0">
+                <Fish className="h-4 w-4 text-teal-700" />
+                Likely Catch:
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {activeSpecies.primarySpecies.map((sp, idx) => (
+                  <span 
+                    key={idx} 
+                    className="bg-white text-teal-900 border border-teal-200/90 px-2.5 py-1 rounded-lg text-xs font-semibold shadow-2xs flex items-center gap-1.5 hover:border-teal-400 transition-colors"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-teal-500"></span>
+                    {sp}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Telemetry metadata footer strip */}
+            <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 font-mono pt-1 border-t border-stone-200/50">
+              <span>Operating Shelf: <strong className="text-slate-700">{activeSpecies.depthRangeMeters}</strong></span>
+              <span>Peak Window: <strong className="text-teal-900 font-bold">{activeSpecies.catchWindow}</strong></span>
+              <span>Gear Recommendation: <strong className="text-slate-700">{activeSpecies.recommendedGear}</strong></span>
+            </div>
+          </div>
+
+          {/* Safety Geofence Active Corridor Note */}
+          {mapLayers.safetyTrafficAlerts && (
+            <div className="text-[11px] text-amber-900 bg-amber-50/90 border border-amber-200 px-3 py-1.5 rounded-xl flex items-center gap-2 font-mono shadow-xs animate-fade-in">
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse flex-shrink-0" />
+              <span>Safety geofence shown around active traffic corridor.</span>
+            </div>
+          )}
+
           <p className="text-[11px] text-slate-500 font-mono text-center">
             💡 Click on the **User Vessel plane** (blue circle) and choose **"Set Route Start"** to trace optimized safety paths.
           </p>
@@ -392,6 +589,95 @@ export default function HomeDashboard() {
         {/* Sidebar Info & Alerts - 4 cols */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           
+          {/* Selected Zone Context Panel (Likely Local Species & Bathymetry) */}
+          <div 
+            ref={speciesRef} 
+            id="species-context-section" 
+            className={`bg-white border rounded-2xl p-5 shadow-sm flex flex-col transition-all duration-300 ${
+              highlightedSpecies 
+                ? "border-teal-500 ring-4 ring-teal-400/30 bg-teal-50/20" 
+                : "border-stone-200"
+            }`}
+          >
+            <div className="flex items-center justify-between border-b border-stone-150 pb-2 mb-3">
+              <h3 className="font-bold text-blue-950 flex items-center gap-2 text-sm">
+                <Fish className="text-teal-700 h-4.5 w-4.5" />
+                <span>Selected Context: Likely Species</span>
+              </h3>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200">
+                CMFRI Baseline
+              </span>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              {/* Target Zone Header */}
+              <div className="bg-[#FAF8F5] p-3 rounded-xl border border-stone-200/80">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-blue-950 text-xs">
+                    {selectedZone?.name || `${REGION_NAMES[activeLocation]} PFZ Corridor`}
+                  </span>
+                  <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded font-bold bg-teal-100 text-teal-900 border border-teal-200">
+                    {selectedZone?.layerType === "fishingGrounds" ? "Grounds Halo" : "Fishing Suitability"}
+                  </span>
+                </div>
+                <p className="text-[10.5px] text-slate-500 mt-1">
+                  {selectedZone 
+                    ? "Zone marker selected. Displaying active telemetry & taxonomic profile." 
+                    : "Defaulting to active regional fishing corridor. Click any PFZ or Fishing Grounds marker on the map to inspect."}
+                </p>
+              </div>
+
+              {/* Likely Local Species with Scientific Names */}
+              <div>
+                <span className="font-mono text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1.5">
+                  Likely Species & Marine Taxonomy:
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {(selectedZone?.species || activeSpecies.primarySpecies).map((sp: string, idx: number) => {
+                    const sciName = (selectedZone?.scientificNames || activeSpecies.scientificNames)?.[idx];
+                    return (
+                      <div key={idx} className="bg-teal-50/40 border border-teal-150 p-2.5 rounded-xl flex flex-col justify-between shadow-2xs">
+                        <span className="font-bold text-teal-950 text-xs flex items-center gap-1.5">
+                          <span className="text-teal-600">🐟</span>
+                          <span>{sp}</span>
+                        </span>
+                        {sciName && (
+                          <span className="text-[9.5px] text-slate-500 italic font-serif mt-1">
+                            {sciName}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Operating Specs */}
+              <div className="bg-stone-50 border border-stone-150 p-3 rounded-xl space-y-1.5 font-mono text-[11px]">
+                <div className="flex justify-between border-b border-stone-100 pb-1">
+                  <span className="text-slate-400">Bathymetric Depth:</span>
+                  <span className="text-blue-950 font-bold">{selectedZone?.depthRange || activeSpecies.depthRangeMeters}</span>
+                </div>
+                <div className="flex justify-between border-b border-stone-100 pb-1">
+                  <span className="text-slate-400">Recommended Gear:</span>
+                  <span className="text-teal-800 font-bold">{selectedZone?.recommendedGear || activeSpecies.recommendedGear}</span>
+                </div>
+                <div className="flex justify-between border-b border-stone-100 pb-1">
+                  <span className="text-slate-400">Peak Catch Window:</span>
+                  <span className="text-slate-800 font-bold">{selectedZone?.catchWindow || activeSpecies.catchWindow}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">CMFRI Status:</span>
+                  <span className="text-emerald-700 font-bold">{selectedZone?.cmfriStatus || activeSpecies.cmfriStatus}</span>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-slate-400 italic leading-snug">
+                💡 Production note: Real-time species distributions link directly with Central Marine Fisheries Research Institute (CMFRI) survey baselines.
+              </p>
+            </div>
+          </div>
+
           {/* Vessel Coordinates Tracker */}
           <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm flex flex-col">
             <h3 className="font-bold text-blue-950 flex items-center gap-2 border-b border-stone-150 pb-2 mb-3 text-sm">
@@ -423,7 +709,7 @@ export default function HomeDashboard() {
           </div>
 
           {/* Unified Alerts */}
-          <div className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm flex flex-col flex-1">
+          <div ref={alertsRef} id="alerts-section" className="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm flex flex-col flex-1">
             <h3 className="font-bold text-blue-950 flex items-center gap-2 mb-3 border-b border-stone-150 pb-2 text-sm">
               <ShieldAlert className="text-yellow-600 h-5 w-5" />
               Geofencing & Safety Warnings

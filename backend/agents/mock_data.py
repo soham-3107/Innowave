@@ -26,6 +26,19 @@ MOCK_REGIONS = {
             "pfz_status": "High Potential Zone",
             "plankton_density": "High"
         },
+        "species": {
+            "primary": ["Indian Mackerel", "Silver Pomfret", "Bombay Duck", "Oil Sardines"],
+            "primary_hi": ["बांगड़ा (Mackerel)", "पापलेट (Silver Pomfret)", "बंबिल (Bombay Duck)", "तारली (Oil Sardines)"],
+            "primary_mr": ["बांगडा (Mackerel)", "पापलेट (Silver Pomfret)", "बोंबील (Bombay Duck)", "तारली (Oil Sardines)"],
+            "depth_range": "15 - 45m Shelf Contours",
+            "depth_range_hi": "15 - 45 मीटर",
+            "depth_range_mr": "15 - 45 मीटर",
+            "gear": "Pelagic Drift Nets & Gillnets",
+            "gear_hi": "पेलाजिक ड्रिफ्ट नेट व गिलनेट",
+            "gear_mr": "ड्रिफ्ट नेट आणि गिलनेट",
+            "catch_window": "Early Morning (05:00 - 09:30 AM)",
+            "cmfri_status": "High Pelagic Biomass Zone (CMFRI Baseline)"
+        },
         "tide": {
             "high_tide_1": "05:42 AM (3.8m)",
             "low_tide_1": "11:58 AM (1.1m)",
@@ -63,6 +76,19 @@ MOCK_REGIONS = {
             "sst_anomaly": 0.6,
             "pfz_status": "High Potential Zone",
             "plankton_density": "High"
+        },
+        "species": {
+            "primary": ["Kingfish (Surmai)", "Yellowfin Tuna", "Indian Mackerel", "Seer Fish"],
+            "primary_hi": ["सुरमई (Kingfish)", "टूना (Yellowfin Tuna)", "बांगड़ा (Mackerel)", "सीर फिश"],
+            "primary_mr": ["सुरमई (Kingfish)", "टुना (Yellowfin Tuna)", "बांगडा (Mackerel)", "इसवण (Seer Fish)"],
+            "depth_range": "25 - 60m Mid-Shelf",
+            "depth_range_hi": "25 - 60 मीटर",
+            "depth_range_mr": "25 - 60 मीटर",
+            "gear": "Trolling Lines & Hook-and-Line",
+            "gear_hi": "ट्रोलिंग लाइन्स व हुक-एंड-लाइन",
+            "gear_mr": "ट्रोलिंग लाइन्स व गळ मासेमारी",
+            "catch_window": "Dawn & Dusk Tidal Influx",
+            "cmfri_status": "Prime Pelagic Predator Corridor (CMFRI Baseline)"
         },
         "tide": {
             "high_tide_1": "06:15 AM (1.8m)",
@@ -102,6 +128,19 @@ MOCK_REGIONS = {
             "pfz_status": "Low Potential Zone",
             "plankton_density": "Low"
         },
+        "species": {
+            "primary": ["Indian Oil Sardines", "Malabar Anchovy", "Karikkadi Prawns", "Threadfin Bream"],
+            "primary_hi": ["तारली (Oil Sardines)", "एंकोवी (Anchovy)", "करिक्काडी झींगा (Prawns)", "किलिमीस"],
+            "primary_mr": ["तारली (Oil Sardines)", "नेतळी (Anchovy)", "कोळंबी (Prawns)", "राणी मासा"],
+            "depth_range": "10 - 35m Coastal Upwelling",
+            "depth_range_hi": "10 - 35 मीटर",
+            "depth_range_mr": "10 - 35 मीटर",
+            "gear": "Ring Seine & Bottom Trawls",
+            "gear_hi": "रिंग सीन व बॉटम ट्रॉल",
+            "gear_mr": "रिंग सीन आणि बॉटम ट्रॉल्स",
+            "catch_window": "Pre-Dawn to Sunrise (04:30 - 07:30 AM)",
+            "cmfri_status": "High Inshore Coastal Shoaling (CMFRI Baseline)"
+        },
         "tide": {
             "high_tide_1": "04:12 AM (1.4m)",
             "low_tide_1": "10:30 AM (0.4m)",
@@ -139,6 +178,19 @@ MOCK_REGIONS = {
             "sst_anomaly": 0.8,
             "pfz_status": "High Potential Zone",
             "plankton_density": "Very High"
+        },
+        "species": {
+            "primary": ["Yellowfin Tuna", "Ribbonfish", "Silver Pomfret", "Croaker (Ghol)"],
+            "primary_hi": ["टूना (Yellowfin Tuna)", "रिबनफिश", "सिल्वर पापलेट", "घोल मछली (Ghol)"],
+            "primary_mr": ["टुना (Yellowfin Tuna)", "रिबनफिश", "पापलेट", "घोल मासा (Ghol)"],
+            "depth_range": "30 - 80m Shelf Slope",
+            "depth_range_hi": "30 - 80 मीटर",
+            "depth_range_mr": "30 - 80 मीटर",
+            "gear": "Longlines & Heavy Gillnets",
+            "gear_hi": "लॉन्गलाइन्स व हेवी गिलनेट",
+            "gear_mr": "लाँगलाईन्स आणि हेवी गिलनेट्स",
+            "catch_window": "Early Morning (04:30 - 08:30 AM)",
+            "cmfri_status": "Major Commercial Demersal/Pelagic Hub (CMFRI Baseline)"
         },
         "tide": {
             "high_tide_1": "07:10 AM (2.8m)",
@@ -178,6 +230,19 @@ MOCK_REGIONS = {
             "pfz_status": "Medium Potential Zone",
             "plankton_density": "Moderate"
         },
+        "species": {
+            "primary": ["Ribbonfish", "Squid & Cuttlefish", "Tiger Prawns", "Lesser Sardines"],
+            "primary_hi": ["रिबनफिश", "स्क्विड / कट्टलफिश", "टाइगर झींगा (Prawns)", "सार्डिन"],
+            "primary_mr": ["वाकटी / रिबनफिश", "मांदेली / स्क्विड", "वाघ्या कोळंबी (Tiger Prawns)", "तारली"],
+            "depth_range": "20 - 50m Shelf Boundary",
+            "depth_range_hi": "20 - 50 मीटर",
+            "depth_range_mr": "20 - 50 मीटर",
+            "gear": "Trawl Nets & Light Jigging",
+            "gear_hi": "ट्रॉल नेट व लाइट जिगिंग",
+            "gear_mr": "ट्रॉल नेट आणि लाईट जिगिंग",
+            "catch_window": "Late Evening & Night Drift",
+            "cmfri_status": "Active Cephalopod & Demersal Shoal (CMFRI Baseline)"
+        },
         "tide": {
             "high_tide_1": "06:30 AM (1.2m)",
             "low_tide_1": "12:45 PM (0.2m)",
@@ -215,6 +280,19 @@ MOCK_REGIONS = {
             "sst_anomaly": 0.5,
             "pfz_status": "High Potential Zone",
             "plankton_density": "High"
+        },
+        "species": {
+            "primary": ["Skipjack Tuna", "Tiger Prawns", "Indian Mackerel", "Anchovies"],
+            "primary_hi": ["स्किपजैक टूना", "टाइगर झींगा", "बांगड़ा (Mackerel)", "एंकोवी"],
+            "primary_mr": ["टुना (Skipjack Tuna)", "वाघ्या कोळंबी", "बांगडा (Mackerel)", "नेतळी"],
+            "depth_range": "25 - 70m Trench Margin",
+            "depth_range_hi": "25 - 70 मीटर",
+            "depth_range_mr": "25 - 70 मीटर",
+            "gear": "Purse Seine & Deep Handlines",
+            "gear_hi": "पर्स सीन व डीप हैंडलाइन्स",
+            "gear_mr": "पर्स सीन आणि खोल हँडलाइन्स",
+            "catch_window": "Morning High Slack Tide",
+            "cmfri_status": "Oceanic Pelagic Migration Route (CMFRI Baseline)"
         },
         "tide": {
             "high_tide_1": "05:15 AM (1.6m)",

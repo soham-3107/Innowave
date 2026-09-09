@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Navbar from "@/components/Navbar";
+import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "INNOWAVE - AI Marine Intelligence Assistant",
+  title: "ORCA - Autonomous Marine Intelligence Assistant",
   description: "Collaborative multi-agent marine intelligence for fishermen and coastal safety",
 };
 
@@ -23,11 +23,10 @@ export default function RootLayout({
           crossOrigin=""
         />
       </head>
-      <body className="antialiased flex flex-col min-h-screen bg-marine-1000 text-white">
-        <Navbar />
-        <main className="flex-1">
+      <body className="antialiased min-h-screen bg-[#FAF8F5] text-slate-800">
+        <AppShell>
           {children}
-        </main>
+        </AppShell>
       </body>
     </html>
   );

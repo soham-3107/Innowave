@@ -168,6 +168,69 @@ def map_data_endpoint():
         }
     ]
     
+    tide_zones = [
+        {
+            "id": "tide-mumbai",
+            "name": "Mumbai Harbor Tidal Station",
+            "center": [18.93, 72.85],
+            "radius_meters": 6000,
+            "high_tide": "05:42 AM (3.8m)",
+            "low_tide": "11:58 AM (1.1m)",
+            "current_speed": "1.2 knots (Ebb)",
+            "type": "tide"
+        },
+        {
+            "id": "tide-goa",
+            "name": "Mormugao Bay Tidal Observatory",
+            "center": [15.41, 73.80],
+            "radius_meters": 5000,
+            "high_tide": "06:15 AM (1.8m)",
+            "low_tide": "12:20 PM (0.3m)",
+            "current_speed": "0.7 knots (Flood)",
+            "type": "tide"
+        },
+        {
+            "id": "tide-kochi",
+            "name": "Cochin Inlet Tidal Rip Zone",
+            "center": [9.97, 76.22],
+            "radius_meters": 6500,
+            "high_tide": "04:12 AM (1.4m)",
+            "low_tide": "10:30 AM (0.4m)",
+            "current_speed": "2.1 knots (Turbulent)",
+            "type": "tide"
+        },
+        {
+            "id": "tide-chennai",
+            "name": "Chennai Port Tidal Station",
+            "center": [13.10, 80.32],
+            "radius_meters": 5000,
+            "high_tide": "06:30 AM (1.2m)",
+            "low_tide": "12:45 PM (0.2m)",
+            "current_speed": "0.4 knots (Slack)",
+            "type": "tide"
+        },
+        {
+            "id": "tide-veraval",
+            "name": "Veraval Harbor Tidal Station",
+            "center": [20.91, 70.36],
+            "radius_meters": 6000,
+            "high_tide": "07:10 AM (2.8m)",
+            "low_tide": "13:20 PM (0.8m)",
+            "current_speed": "1.4 knots (Surge)",
+            "type": "tide"
+        },
+        {
+            "id": "tide-vizag",
+            "name": "Visakhapatnam Deep Port Tidal Zone",
+            "center": [17.70, 83.32],
+            "radius_meters": 5500,
+            "high_tide": "05:15 AM (1.6m)",
+            "low_tide": "11:30 AM (0.3m)",
+            "current_speed": "0.8 knots (Moderate)",
+            "type": "tide"
+        }
+    ]
+
     vessel_path = [
         [18.940, 72.825],
         [18.925, 72.820],
@@ -183,6 +246,7 @@ def map_data_endpoint():
     return {
         "pfzs": pfzs,
         "hazards": hazards,
+        "tide_zones": tide_zones,
         "vessel_path": vessel_path,
         "default_center": [18.95, 72.80],
         "reports": COMMUNITY_REPORTS
