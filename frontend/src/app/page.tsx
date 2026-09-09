@@ -101,9 +101,11 @@ export default function HomeDashboard() {
       }
     };
 
+    window.addEventListener("innowave-location-changed", handleCustomLocation);
     window.addEventListener("orca-location-changed", handleCustomLocation);
     window.addEventListener("storage", updateLocationFromStorage);
     return () => {
+      window.removeEventListener("innowave-location-changed", handleCustomLocation);
       window.removeEventListener("orca-location-changed", handleCustomLocation);
       window.removeEventListener("storage", updateLocationFromStorage);
     };

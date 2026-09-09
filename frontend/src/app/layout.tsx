@@ -3,7 +3,7 @@ import "./globals.css";
 import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "ORCA - Autonomous Marine Intelligence Assistant",
+  title: "INNOWAVE - Autonomous Marine Intelligence Assistant",
   description: "Collaborative multi-agent marine intelligence for fishermen and coastal safety",
 };
 

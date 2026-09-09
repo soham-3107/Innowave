@@ -24,7 +24,7 @@ const REGION_DATA: Record<string, { name: string; basin: string }> = {
 
 const PAGE_NAMES: Record<string, string> = {
   "/": "Marine Map",
-  "/copilot": "Ask ORCA (Copilot)",
+  "/copilot": "Ask INNOWAVE (Copilot)",
   "/analytics": "Ocean Analytics",
   "/research": "Research Mode"
 };
@@ -56,9 +56,11 @@ export default function Header({ onToggleMobileDrawer, onOpenSettings }: HeaderP
       }
     };
 
+    window.addEventListener("innowave-location-changed", handleStorageChange);
     window.addEventListener("orca-location-changed", handleStorageChange);
     window.addEventListener("storage", handleStorageChange);
     return () => {
+      window.removeEventListener("innowave-location-changed", handleStorageChange);
       window.removeEventListener("orca-location-changed", handleStorageChange);
       window.removeEventListener("storage", handleStorageChange);
     };
@@ -68,6 +70,7 @@ export default function Header({ onToggleMobileDrawer, onOpenSettings }: HeaderP
     setActiveLocation(locKey);
     localStorage.setItem("innowave-active-location", locKey);
     localStorage.setItem("orca-active-location", locKey);
+    window.dispatchEvent(new CustomEvent("innowave-location-changed", { detail: locKey }));
     window.dispatchEvent(new CustomEvent("orca-location-changed", { detail: locKey }));
   };
 

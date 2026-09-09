@@ -29,11 +29,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const savedSpeed = localStorage.getItem("orca-sim-speed") || "1x";
-      const savedUnits = localStorage.getItem("orca-units") || "nautical";
-      const savedAudio = localStorage.getItem("orca-audio-alerts") !== "false";
-      const savedSync = localStorage.getItem("orca-agent-sync") !== "false";
-      const savedApi = localStorage.getItem("orca-api-url") || (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000");
+      const savedSpeed = localStorage.getItem("innowave-sim-speed") || localStorage.getItem("orca-sim-speed") || "1x";
+      const savedUnits = localStorage.getItem("innowave-units") || localStorage.getItem("orca-units") || "nautical";
+      const savedAudio = (localStorage.getItem("innowave-audio-alerts") || localStorage.getItem("orca-audio-alerts")) !== "false";
+      const savedSync = (localStorage.getItem("innowave-agent-sync") || localStorage.getItem("orca-agent-sync")) !== "false";
+      const savedApi = localStorage.getItem("innowave-api-url") || localStorage.getItem("orca-api-url") || (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000");
 
       setSpeed(savedSpeed);
       setUnitSystem(savedUnits);
@@ -46,6 +46,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   if (!isOpen) return null;
 
   const handleSave = () => {
+    localStorage.setItem("innowave-sim-speed", speed);
+    localStorage.setItem("innowave-units", unitSystem);
+    localStorage.setItem("innowave-audio-alerts", String(audioAlerts));
+    localStorage.setItem("innowave-agent-sync", String(autoSyncAgents));
+    localStorage.setItem("innowave-api-url", apiUrl);
     localStorage.setItem("orca-sim-speed", speed);
     localStorage.setItem("orca-units", unitSystem);
     localStorage.setItem("orca-audio-alerts", String(audioAlerts));
@@ -81,7 +86,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
             <div>
               <h3 className="font-extrabold text-blue-950 text-sm">Platform Preferences</h3>
-              <p className="text-[10px] text-slate-400 font-mono">ORCA Marine Intelligence Suite</p>
+              <p className="text-[10px] text-slate-400 font-mono">INNOWAVE Marine Intelligence Suite</p>
             </div>
           </div>
           <button
