@@ -30,19 +30,24 @@ interface Message {
   timestamp: string;
 }
 
-// Detect response language from script and keywords
+// Detect response language from script and grammar keywords
 const detectLanguage = (text: string): { langCode: string; label: string } => {
   const hasDevanagari = /[\u0900-\u097F]/.test(text);
   if (!hasDevanagari) {
     return { langCode: "en-US", label: "English" };
   }
-  const marathiClues = [
-    "आहे", "नाही", "का", "उद्या", "आज", "मासे", "वारा", "लाटा", "धोका", "सुरक्षित",
-    "येथे", "शेड्यूल", "स्थिती", "तपासणी", "सावध", "क्षेत्रात", "हवामान", "अंदाज",
-    "किमी", "गाठ", "वेळापत्रक", "किनारपट्टीवरील", "अहवाल"
-  ];
-  const isMarathi = marathiClues.some(word => text.includes(word));
-  return isMarathi 
+  
+  const marathiMarkers = ["आहे", "आहेत", "नाही", "नाहीत", "कोणती", "कोणता", "कोणते", "मासेमारी", "मासे", "वादळ", "वादळाचा", "वादळाची", "वेळ", "वेळापत्रक", "साठी", "च्या", "ची", "चे", "चा", "तील", "समुद्रात", "उद्या", "लाटा", "लाटांची", "वारा", "वाऱ्याचा", "अहवाल", "किनारपट्टी"];
+  const hindiMarkers = ["है", "हैं", "था", "थी", "क्या", "कौन", "कौनसा", "कौनसी", "कौन सा", "कौन सी", "मछली", "पकड़ने", "में", "के", "की", "का", "को", "से", "पास", "लिए", "जाना", "सकता", "सकती", "मौसम", "तूफान", "समय", "खतरा", "अच्छा", "अच्छी", "तट"];
+  
+  let mrScore = marathiMarkers.filter(word => text.includes(word)).length;
+  let hiScore = hindiMarkers.filter(word => text.includes(word)).length;
+  
+  if (text.endsWith("का") || text.endsWith("का?") || text.includes("आहे का")) {
+    mrScore += 2;
+  }
+  
+  return mrScore > hiScore
     ? { langCode: "mr-IN", label: "Marathi" } 
     : { langCode: "hi-IN", label: "Hindi" };
 };
@@ -87,55 +92,63 @@ const getBestVoice = (targetLang: string): SpeechSynthesisVoice | null => {
 // Telemetry database for client fallback simulation
 const LOCAL_MOCK_DATA: Record<string, any> = {
   mumbai: {
-    name: "Mumbai Coast",
+    name: "Mumbai Coast", name_hi: "मुंबई तट", name_mr: "मुंबई किनारपट्टी",
     lat: 18.95, lon: 72.80,
     wind: 12.5, wave: 1.2, chloro: 4.8, sst: 28.2, tide_ht: "05:42 AM (3.8m)", tide_lt: "11:58 AM (1.1m)", imbl: 320.0,
     safety: "SAFE", danger_score: 18,
+    condition: "Partly Cloudy", condition_hi: "आंशिक बादल", condition_mr: "अंशतः ढगाळ",
     restricted_zone: "Naval Dockyard Zone", restricted_dist: 8.5
   },
   goa: {
-    name: "Goa Coast",
+    name: "Goa Coast", name_hi: "गोवा तट", name_mr: "गोवा किनारपट्टी",
     lat: 15.49, lon: 73.82,
     wind: 9.8, wave: 0.8, chloro: 5.1, sst: 28.5, tide_ht: "06:15 AM (1.8m)", tide_lt: "12:20 PM (0.3m)", imbl: 380.0,
     safety: "SAFE", danger_score: 15,
+    condition: "Sunny and Clear", condition_hi: "धूप और साफ मौसम", condition_mr: "स्वच्छ व निरभ्र आकाश",
     restricted_zone: "Mormugao Port Limit", restricted_dist: 11.5
   },
   kochi: {
-    name: "Kochi Coast",
+    name: "Kochi Coast", name_hi: "कोच्चि तट", name_mr: "कोची किनारपट्टी",
     lat: 9.93, lon: 76.15,
     wind: 28.0, wave: 3.8, chloro: 1.2, sst: 26.5, tide_ht: "04:12 AM (1.4m)", tide_lt: "10:30 AM (0.4m)", imbl: 280.0,
     safety: "DANGER", danger_score: 75,
+    condition: "Severe Thunderstorm", condition_hi: "भीषण आंधी-तूफान", condition_mr: "तीव्र वादळी पाऊस",
+    warnings: ["Gale warning in effect"], warnings_hi: ["तेज समुद्री तूफान की चेतावनी जारी"], warnings_mr: ["वेगवान वादळी वाऱ्यांचा इशारा जारी"],
     restricted_zone: "Port Channel Area", restricted_dist: 1.2
   },
   chennai: {
-    name: "Chennai Coast",
+    name: "Chennai Coast", name_hi: "चेन्नई तट", name_mr: "चेन्नई किनारपट्टी",
     lat: 13.08, lon: 80.30,
     wind: 9.5, wave: 0.8, chloro: 3.1, sst: 29.5, tide_ht: "06:30 AM (1.2m)", tide_lt: "12:45 PM (0.2m)", imbl: 210.0,
     safety: "SAFE", danger_score: 12,
+    condition: "Sunny / Clear", condition_hi: "धूप और साफ मौसम", condition_mr: "स्वच्छ व निरभ्र",
     restricted_zone: "Ennore Port Limit", restricted_dist: 12.0
   },
   veraval: {
-    name: "Veraval / Gujarat Coast",
+    name: "Veraval / Gujarat Coast", name_hi: "वेरावल / गुजरात तट", name_mr: "वेरावळ / गुजरात किनारपट्टी",
     lat: 20.90, lon: 70.37,
     wind: 18.0, wave: 2.2, chloro: 6.2, sst: 27.0, tide_ht: "07:10 AM (2.8m)", tide_lt: "13:20 PM (0.8m)", imbl: 78.0,
     safety: "CAUTION", danger_score: 45,
+    condition: "Overcast", condition_hi: "घने बादल", condition_mr: "ढगाळ वातावरण",
+    warnings: ["Moderate swell advisory"], warnings_hi: ["मध्यम ऊंची लहरों की सलाह"], warnings_mr: ["मध्यम लाटांचा इशारा"],
     restricted_zone: "International Maritime Boundary Line", restricted_dist: 78.0
   },
   vizag: {
-    name: "Visakhapatnam Coast",
+    name: "Visakhapatnam Coast", name_hi: "विशाखापट्टनम तट", name_mr: "विशाखापट्टणम किनारपट्टी",
     lat: 17.68, lon: 83.30,
     wind: 14.0, wave: 1.4, chloro: 5.5, sst: 28.8, tide_ht: "05:15 AM (1.6m)", tide_lt: "11:30 AM (0.3m)", imbl: 450.0,
     safety: "SAFE", danger_score: 22,
+    condition: "Light Drizzle", condition_hi: "हल्की बूंदाबांदी", condition_mr: "हलक्या पावसाच्या सरी",
     restricted_zone: "Naval Base Prohibited Area", restricted_dist: 4.2
   }
 };
 
 const LOCAL_REPORTS = [
-  { id: 1, type: "Good Catch", text: "Spotted large school of mackerel 12km out.", region: "mumbai", timestamp: "2 hours ago" },
-  { id: 2, type: "Calm Seas", text: "Calm and clear seas today, perfect for fishing.", region: "goa", timestamp: "5 hours ago" },
-  { id: 3, type: "Storm Warning", text: "Sudden strong winds and dark storm clouds forming.", region: "kochi", timestamp: "1 hour ago" },
-  { id: 4, type: "High Waves", text: "Slightly high waves swell, but manageable for large vessels.", region: "chennai", timestamp: "4 hours ago" },
-  { id: 5, type: "Good Catch", text: "Rich plankton density, caught massive haul of tuna.", region: "veraval", timestamp: "6 hours ago" }
+  { id: 1, type: "Good Catch", text: "Spotted large school of mackerel 12km out.", text_hi: "तट से 12 किमी दूर बांगड़ा मछली का बड़ा झुंड देखा गया।", text_mr: "किनाऱ्यापासून १२ किमी अंतरावर बांगडा माशांचा मोठा थवा आढळला आहे.", region: "mumbai", timestamp: "2 hours ago", timestamp_hi: "2 घंटे पहले", timestamp_mr: "२ तासांपूर्वी" },
+  { id: 2, type: "Calm Seas", text: "Calm and clear seas today, perfect for fishing.", text_hi: "आज समुद्र शांत और साफ है, मछली पकड़ने के लिए उत्तम स्थिति है।", text_mr: "आज समुद्र शांत आणि स्वच्छ आहे, मासेमारीसाठी उत्तम परिस्थिती आहे.", region: "goa", timestamp: "5 hours ago", timestamp_hi: "5 घंटे पहले", timestamp_mr: "५ तासांपूर्वी" },
+  { id: 3, type: "Storm Warning", text: "Sudden strong winds and dark storm clouds forming.", text_hi: "अचानक तेज हवाएं और काले तूफानी बादल घिर रहे हैं।", text_mr: "अचानक जोरदार वारे आणि काळे वादळी ढग जमा होत आहेत.", region: "kochi", timestamp: "1 hour ago", timestamp_hi: "1 घंटा पहले", timestamp_mr: "१ तासापूर्वी" },
+  { id: 4, type: "High Waves", text: "Slightly high waves swell, but manageable for large vessels.", text_hi: "लहरें थोड़ी ऊंची हैं, लेकिन बड़ी नौकाओं के लिए सुरक्षित हैं।", text_mr: "लाटांची उंची थोडी जास्त आहे, पण मोठ्या बोटींसाठी सुरक्षित आहे.", region: "chennai", timestamp: "4 hours ago", timestamp_hi: "4 घंटे पहले", timestamp_mr: "४ तासांपूर्वी" },
+  { id: 5, type: "Good Catch", text: "Rich plankton density, caught massive haul of tuna.", text_hi: "भरपूर प्लवक घनत्व, बड़ी मात्रा में टूना मछली पकड़ी गई।", text_mr: "प्लवक घनता उत्तम असून मोठ्या प्रमाणात टुना मासे मिळाले.", region: "veraval", timestamp: "6 hours ago", timestamp_hi: "6 घंटे पहले", timestamp_mr: "६ तासांपूर्वी" }
 ];
 
 export default function CopilotPage() {
@@ -281,13 +294,8 @@ export default function CopilotPage() {
     const textLower = text.toLowerCase();
     
     // 1. Detect language
-    const hasDevanagari = /[\u0900-\u097F]+/.test(text);
-    let detectedLang = "en";
-    if (hasDevanagari) {
-      const marathiClues = ["आहे", "का", "उद्या", "आज", "मासे", "वारा", "लाटा", "धोका", "सुरक्षित"];
-      const marathiCount = marathiClues.filter(word => text.includes(word)).length;
-      detectedLang = marathiCount > 0 ? "mr" : "hi";
-    }
+    const { langCode } = detectLanguage(text);
+    const detectedLang = langCode.startsWith("mr") ? "mr" : langCode.startsWith("hi") ? "hi" : "en";
 
     // 2. Resolve Location with variations and log defaults
     let targetKey = "";
@@ -295,12 +303,12 @@ export default function CopilotPage() {
     let is_explicit_loc = false;
     
     const locationVariations: Record<string, string[]> = {
-      mumbai: ["mumbai", "bombay", "mumb", "mum", "मुम्बई", "मुंबई", "मुंबईत"],
-      goa: ["goa", "panaji", "panjim", "गोवा", "गोव्यात", "गोव्या", "पणजी"],
-      kochi: ["kochi", "cochin", "कोच्चि", "कोची", "कोचीन", "कोच्चीत"],
-      chennai: ["chennai", "madras", "चेन्नई", "मद्रास", "चेन्नईत"],
-      veraval: ["veraval", "gujarat", "वेरावळ", "वेरावळात", "गुजरात"],
-      vizag: ["vizag", "visakhapatnam", "विशाखापट्टनम", "विशाखापट्टणम", "वाईझॅग"]
+      mumbai: ["mumbai", "bombay", "mumb", "mum", "मुम्बई", "मुंबई", "मुंबईत", "मुंबईच्या", "मुंबईतील", "बॉम्बे"],
+      goa: ["goa", "panaji", "panjim", "गोवा", "गोव्यात", "गोव्याच्या", "गोव्या", "पणजी"],
+      kochi: ["kochi", "cochin", "कोच्चि", "कोची", "कोचीन", "कोच्चीत", "कोचीच्या"],
+      chennai: ["chennai", "madras", "चेन्नई", "मद्रास", "चेन्नईत", "चेन्नईच्या"],
+      veraval: ["veraval", "gujarat", "वेरावळ", "वेरावळात", "वेरावल", "गुजरात", "सौराष्ट्र"],
+      vizag: ["vizag", "visakhapatnam", "विशाखापट्टनम", "विशाखापट्टणम", "विशाखापत्तनम", "वाईझॅग"]
     };
 
     for (const [key, words] of Object.entries(locationVariations)) {
@@ -324,37 +332,43 @@ export default function CopilotPage() {
     // 3. Extract Time Context
     const isTomorrow = textLower.includes("tomorrow") || textLower.includes("कल") || textLower.includes("उद्या");
     const isToday = textLower.includes("today") || textLower.includes("आज");
-    const isMorning = textLower.includes("morning") || textLower.includes("सकाळ") || textLower.includes("सकाळी") || textLower.includes("सुबह");
-    const isEvening = textLower.includes("evening") || textLower.includes("संध्याकाळ") || textLower.includes("शाम");
-    const isWeek = textLower.includes("week") || textLower.includes("हफ्ता") || textLower.includes("आठवडा");
+    const isMorning = textLower.includes("morning") || textLower.includes("सकाळ") || textLower.includes("सकाळी") || textLower.includes("सुबह") || textLower.includes("पहाटे");
+    const isEvening = textLower.includes("evening") || textLower.includes("संध्याकाळ") || textLower.includes("संध्याकाळी") || textLower.includes("शाम");
+    const isWeek = textLower.includes("week") || textLower.includes("हफ्ता") || textLower.includes("आठवडा") || textLower.includes("सप्ताह");
     
-    let time_context = "";
-    if (isTomorrow) time_context = "tomorrow";
-    else if (isToday) time_context = "today";
-    
-    if (isMorning) time_context += time_context ? " morning" : "morning";
-    else if (isEvening) time_context += time_context ? " evening" : "evening";
-    else if (isWeek) time_context += time_context ? " this week" : "this week";
+    let time_ctx = { key: "", en: "", hi: "", mr: "" };
+    if (isTomorrow && isMorning) time_ctx = { key: "tomorrow morning", en: "tomorrow morning", hi: "कल सुबह", mr: "उद्या सकाळी" };
+    else if (isTomorrow && isEvening) time_ctx = { key: "tomorrow evening", en: "tomorrow evening", hi: "कल शाम", mr: "उद्या संध्याकाळी" };
+    else if (isTomorrow) time_ctx = { key: "tomorrow", en: "tomorrow", hi: "कल", mr: "उद्या" };
+    else if (isToday && isMorning) time_ctx = { key: "today morning", en: "today morning", hi: "आज सुबह", mr: "आज सकाळी" };
+    else if (isToday && isEvening) time_ctx = { key: "today evening", en: "today evening", hi: "आज शाम", mr: "आज संध्याकाळी" };
+    else if (isToday) time_ctx = { key: "today", en: "today", hi: "आज", mr: "आज" };
+    else if (isMorning) time_ctx = { key: "morning", en: "morning", hi: "सुबह", mr: "सकाळी" };
+    else if (isEvening) time_ctx = { key: "evening", en: "evening", hi: "शाम", mr: "संध्याकाळी" };
+    else if (isWeek) time_ctx = { key: "this week", en: "this week", hi: "इस सप्ताह", mr: "या आठवड्यात" };
 
     // 4. Identify intent
     const isTide = textLower.includes("tide") || textLower.includes("tides") || textLower.includes("भरती") || textLower.includes("ज्वार") || textLower.includes("ओहोटी") || textLower.includes("भाटा");
-    const isFish = textLower.includes("fish") || textLower.includes("pfz") || textLower.includes("chlorophyll") || textLower.includes("मासे") || textLower.includes("मछली") || textLower.includes("मासेमारी");
-    const isWeather = textLower.includes("weather") || textLower.includes("wind") || textLower.includes("storm") || textLower.includes("waves") || textLower.includes("वारा") || textLower.includes("लाटा") || textLower.includes("मौसम") || textLower.includes("हवामान");
+    const isFish = textLower.includes("fish") || textLower.includes("pfz") || textLower.includes("chlorophyll") || textLower.includes("मासे") || textLower.includes("मछली") || textLower.includes("मासेमारी") || textLower.includes("पकड़ने");
+    const isWeather = textLower.includes("weather") || textLower.includes("wind") || textLower.includes("storm") || textLower.includes("cyclone") || textLower.includes("वारा") || textLower.includes("लाटा") || textLower.includes("मौसम") || textLower.includes("हवामान") || textLower.includes("वादळ") || textLower.includes("तूफान");
     const isBorder = textLower.includes("border") || textLower.includes("imbl") || textLower.includes("restricted") || textLower.includes("navy") || textLower.includes("सीमा") || textLower.includes("प्रतिबंधित");
-    const isSafe = textLower.includes("safe") || textLower.includes("safety") || textLower.includes("danger") || textLower.includes("warning") || textLower.includes("सुरक्षित") || textLower.includes("धोका");
+    const isSafe = textLower.includes("safe") || textLower.includes("safety") || textLower.includes("danger") || textLower.includes("warning") || textLower.includes("सुरक्षित") || textLower.includes("धोका") || textLower.includes("खतरा") || textLower.includes("इशारा") || textLower.includes("चेतावनी");
+    const isTimingSpecific = textLower.includes("best time") || textLower.includes("सर्वोत्तम वेळ") || textLower.includes("वेळ कोणती") || textLower.includes("अनुकूल समय") || textLower.includes("अच्छा समय") || textLower.includes("कब");
+    const isStormSpecific = textLower.includes("storm") || textLower.includes("cyclone") || textLower.includes("वादळ") || textLower.includes("वादळाचा") || textLower.includes("तूफान");
 
     let intent = "general";
-    if (isTide) intent = "tide";
+    if (isStormSpecific) intent = "weather";
+    else if (isSafe) intent = "safety";
     else if (isFish) intent = "fish";
     else if (isWeather) intent = "weather";
+    else if (isTide) intent = "tide";
     else if (isBorder) intent = "gis";
-    else if (isSafe) intent = "safety";
 
-    // 5. Apply random noise per request
-    const wind_val = parseFloat((d.wind + (Math.random() * 3.0 - 1.5)).toFixed(1));
-    const wave_val = parseFloat(Math.max(0.2, d.wave + (Math.random() * 0.3 - 0.15)).toFixed(2));
-    const chloro_val = parseFloat(Math.max(0.1, d.chloro + (Math.random() * 0.6 - 0.3)).toFixed(1));
-    const sst_val = parseFloat((d.sst + (Math.random() * 0.8 - 0.4)).toFixed(1));
+    // 5. Apply telemetry calculations
+    const wind_val = parseFloat((d.wind + (Math.random() * 1.6 - 0.8)).toFixed(1));
+    const wave_val = parseFloat(Math.max(0.2, d.wave + (Math.random() * 0.2 - 0.1)).toFixed(2));
+    const chloro_val = parseFloat(Math.max(0.1, d.chloro + (Math.random() * 0.4 - 0.2)).toFixed(1));
+    const sst_val = parseFloat((d.sst + (Math.random() * 0.6 - 0.3)).toFixed(1));
 
     // Community observation filter
     const activeReports = LOCAL_REPORTS.filter(r => r.region === targetKey);
@@ -365,16 +379,20 @@ export default function CopilotPage() {
       else if (r.type === "Calm Seas") community_risk_mod -= 5;
     });
 
+    const has_storm_warning = (d.warnings && d.warnings.length > 0) || activeReports.some(r => r.type === "Storm Warning");
+
     // Calculate dynamic danger score
-    const wind_risk = Math.min(35.0, (wind_val / 30.0) * 35.0);
+    let wind_risk = Math.min(35.0, (wind_val / 30.0) * 35.0);
     const wave_risk = Math.min(35.0, (wave_val / 4.0) * 35.0);
     const gis_risk = d.imbl < 100.0 ? (100.0 - d.imbl) * 0.3 : 0.0;
+    if (has_storm_warning) wind_risk += 15.0;
+
     const final_danger_score = Math.round(Math.max(0, Math.min(100, wind_risk + wave_risk + Math.min(30.0, gis_risk) + community_risk_mod)));
     const safety_level = final_danger_score < 40 ? "SAFE" : final_danger_score < 70 ? "CAUTION" : "DANGER";
 
     // Dynamic Agreement Status & Confidence
     const isHighPfz = chloro_val >= 4.5;
-    const isUnsafe = final_danger_score >= 15;
+    const isUnsafe = final_danger_score >= 35;
     
     let agreementStatus = "agree";
     let agreementBadge = "✅ Agents in agreement";
@@ -391,7 +409,7 @@ export default function CopilotPage() {
       agreementBadge = "✅ Agents in agreement";
       agreementExplanation = "Agents align: low fishing potential and high wave danger.";
       confidence_score = Math.floor(92 + Math.random() * 6); // 92-97%
-    } else if (isHighPfz && final_danger_score < 15) {
+    } else if (isHighPfz && final_danger_score < 35) {
       agreementStatus = "agree";
       agreementBadge = "✅ Agents in agreement";
       agreementExplanation = "Agents align: favorable catch potential and safe sea states.";
@@ -400,11 +418,11 @@ export default function CopilotPage() {
 
     // Compile reasoning trace
     const simulatedTrace = [];
-    simulatedTrace.push({ agent: "Planner Agent", status: "completed", message: `Auto-detected query language: **${langName}**.` });
+    simulatedTrace.push({ agent: "Planner Agent", status: "completed", message: `Detected query language: **${langName}**. Deconstructing question structure.` });
     simulatedTrace.push({ agent: "Planner Agent", status: "completed", message: loc_trace_msg });
     
-    if (time_context) {
-      simulatedTrace.push({ agent: "Planner Agent", status: "completed", message: `Time context parsed: **${time_context}**.` });
+    if (time_ctx.en) {
+      simulatedTrace.push({ agent: "Planner Agent", status: "completed", message: `Time context parsed: **${time_ctx.en}**.` });
     }
 
     simulatedTrace.push({ agent: "Planner Agent", status: "completed", message: `Query classified under **${intent.toUpperCase()}** domain. Dynamic routing active.` });
@@ -413,9 +431,9 @@ export default function CopilotPage() {
     const run_weather = ["general", "weather", "safety"].includes(intent);
     const run_ocean = ["general", "weather", "safety", "fish"].includes(intent);
     const run_satellite = ["general", "fish"].includes(intent);
-    const run_tide = ["general", "tide"].includes(intent);
+    const run_tide = ["general", "tide", "fish"].includes(intent);
     const run_gis = ["general", "gis", "safety"].includes(intent);
-    const run_risk = ["general", "safety"].includes(intent);
+    const run_risk = ["general", "safety", "weather"].includes(intent);
 
     if (run_weather) {
       simulatedTrace.push({ agent: "Weather Agent", status: "completed", message: `Weather analysis: Wind speeds are **${wind_val} knots**.` });
@@ -433,7 +451,6 @@ export default function CopilotPage() {
       simulatedTrace.push({ agent: "GIS Agent", status: "completed", message: `Boundaries check: Proximity to boundary line: **${d.imbl} km**.` });
     }
 
-    // Community agent step
     if (activeReports.length > 0) {
       simulatedTrace.push({
         agent: "Community Agent",
@@ -449,35 +466,45 @@ export default function CopilotPage() {
     }
 
     if (run_risk) {
-      simulatedTrace.push({ agent: "Risk Agent", status: "completed", message: `Synthesized danger index (Community adjusted: ${community_risk_mod >= 0 ? '+' : ''}${community_risk_mod}): **${final_danger_score}/100**. Safety Level: **${safety_level}**.` });
+      simulatedTrace.push({ agent: "Risk Agent", status: "completed", message: `Synthesized danger index (Community adjusted: ${community_risk_mod >= 0 ? '+' : ''}${community_risk_mod}): **${final_danger_score}/100** (${safety_level}).` });
     }
 
-    simulatedTrace.push({ agent: "Brain Agent", status: "completed", message: "Assembled reports and generated topic-specific answer." });
+    simulatedTrace.push({ agent: "Brain Agent", status: "completed", message: `Consolidated findings and translated dynamic output to user preferred language (**${langName}**).` });
 
-    // Dynamic text output assembly
+    // Localized output assembly
     let finalAnswer = "";
-    const time_suffix_en = time_context ? `for **${time_context}**` : "";
-    const time_suffix_hi = time_context ? `**${time_context}** के लिए` : "";
-    const time_suffix_mr = time_context ? `**${time_context}** साठी` : "";
-
     const speciesObj = REGION_SPECIES[targetKey] || REGION_SPECIES.mumbai;
+    const regNameHi = d.name_hi || d.name;
+    const regNameMr = d.name_mr || d.name;
+    const condHi = d.condition_hi || d.condition;
+    const condMr = d.condition_mr || d.condition;
+    const dangerHi = safety_level === "SAFE" ? "पूर्णतः सुरक्षित" : safety_level === "CAUTION" ? "सावधानी बरतें (मध्यम जोखिम)" : "खतरा / असुरक्षित";
+    const dangerMr = safety_level === "SAFE" ? "पूर्णपणे सुरक्षित" : safety_level === "CAUTION" ? "सावधगिरी बाळगा (मध्यम धोका)" : "धोकादायक / असुरक्षित";
 
     if (detectedLang === "en") {
-      const intro = is_explicit_loc 
-        ? `Regarding your inquiry about ${d.name} ${time_suffix_en}:`
-        : `Regarding your inquiry ${time_suffix_en}:`;
+      const time_prefix = time_ctx.en ? `for **${time_ctx.en}**` : "";
+      const intro = `Regarding your inquiry about ${d.name} ${time_prefix}:`.trim();
       let body = "";
 
       if (intent === "tide") {
         body = `Next High Tide will peak at ${d.tide_ht} and Low Tide is scheduled at ${d.tide_lt}.`;
       } else if (intent === "fish") {
-        body = `Chlorophyll density is evaluated at ${chloro_val} mg/m³ (${d.chloro >= 4.5 ? "High PFZ" : "Medium/Low PFZ"}). Sea Surface Temperature is ${sst_val}°C, representing high catch potential.\n\n🐟 **Likely Local Species (CMFRI Baseline)**: ${speciesObj.primarySpecies.join(", ")}.\n• Bathymetric Operating Depth: ${speciesObj.depthRangeMeters}\n• Recommended Gear: ${speciesObj.recommendedGear}\n• Peak Catch Window: ${speciesObj.catchWindow}`;
-      } else if (intent === "weather") {
-        body = `Winds are clocked at ${wind_val} knots. Wave height swell is measuring ${wave_val}m.`;
+        if (isTimingSpecific) {
+          body = `⏰ **Best Fishing Time**: ${speciesObj.catchWindow} during peak tidal flux.\n\n🌊 **Marine State**: High Tide: ${d.tide_ht}, Low Tide: ${d.tide_lt}. SST is ${sst_val}°C with swells at ${wave_val}m.\n🐟 **Primary Species (CMFRI Baseline)**: ${speciesObj.primarySpecies.join(", ")}.\n• Recommended Gear: ${speciesObj.recommendedGear}\n• Depth Range: ${speciesObj.depthRangeMeters}`;
+        } else {
+          body = `Satellite telemetry indicates high catch potential 15-35 km offshore with Chlorophyll density at ${chloro_val} mg/m³ and SST at ${sst_val}°C.\n\n🐟 **Likely Local Species (CMFRI Baseline)**: ${speciesObj.primarySpecies.join(", ")}.\n• Bathymetric Operating Depth: ${speciesObj.depthRangeMeters}\n• Recommended Gear: ${speciesObj.recommendedGear}\n• Peak Catch Window: ${speciesObj.catchWindow}`;
+        }
+      } else if (isStormSpecific || intent === "weather") {
+        if (has_storm_warning) {
+          body = `⚠️ **STORM ALERT**: Active storm advisory in effect for ${d.name}. Wind speed is ${wind_val} knots and wave swells are ${wave_val}m. Fishermen are advised to exercise extreme caution.`;
+        } else {
+          body = `✅ **NO STORM WARNING**: There are currently no active storm warnings for ${d.name}. Weather is ${d.condition}. Winds are at ${wind_val} knots and waves are at ${wave_val}m.`;
+        }
       } else if (intent === "gis") {
         body = `The vessel is safely ${d.imbl} km from the IMBL limit. Local restricted regions include ${d.restricted_zone} (${d.restricted_dist} km away).`;
       } else if (intent === "safety") {
-        body = `The safety rating is calculated as ${safety_level} (Danger Index: ${final_danger_score}/100). Wave heights are at ${wave_val}m and wind speeds are ${wind_val} knots.`;
+        const verdict = safety_level === "SAFE" ? "Yes, it is safe to proceed to sea today." : "Caution is advised before venturing into sea.";
+        body = `🛡️ **Safety Verdict**: ${verdict}\n\n• Safety Rating: **${safety_level}** (Threat Score: ${final_danger_score}/100)\n• Wave Height: ${wave_val}m | Wind Speed: ${wind_val} knots\n• Weather: ${d.condition} | IMBL Distance: ${d.imbl} km`;
       } else {
         body = `Safety rating is ${safety_level} (Wave: ${wave_val}m, Wind: ${wind_val} knots). Chlorophyll levels are at ${chloro_val} mg/m³. Likely local species: ${speciesObj.primarySpecies.slice(0, 3).join(", ")}.`;
       }
@@ -489,53 +516,73 @@ export default function CopilotPage() {
       finalAnswer = `${intro}\n\n${body}`;
 
     } else if (detectedLang === "hi") {
-      const intro = is_explicit_loc 
-        ? `${d.name} ${time_suffix_hi} की स्थिति रिपोर्ट:`
-        : `आपके सवाल ${time_suffix_hi} की स्थिति रिपोर्ट:`;
+      const time_prefix_hi = time_ctx.hi ? `${time_ctx.hi} के लिए ` : "";
+      const intro = `${time_prefix_hi}${regNameHi} की स्थिति रिपोर्ट:`;
       let body = "";
 
       if (intent === "tide") {
         body = `ज्वार-भाटा विवरण: अगला उच्च ज्वार ${d.tide_ht} पर और निम्न ज्वार ${d.tide_lt} पर है।`;
       } else if (intent === "fish") {
-        body = `उपग्रह के अनुसार यहाँ क्लोरोफिल स्तर ${chloro_val} mg/m³ है। मछली मिलने की संभावनाएं बहुत अच्छी हैं।\n\n🐟 **संभावित स्थानीय प्रजातियाँ (CMFRI डेटा)**: ${speciesObj.primarySpecies.join(", ")}।\n• परिचालन गहराई: ${speciesObj.depthRangeMeters}\n• अनुशंसित गियर: ${speciesObj.recommendedGear}\n• अनुकूल समय: ${speciesObj.catchWindow}`;
-      } else if (intent === "weather") {
-        body = `मौसम विवरण: हवा की गति ${wind_val} समुद्री मील और लहरों की ऊंचाई ${wave_val} मीटर है।`;
+        const speciesHi = ["बांगड़ा (मैकेरल)", "सिल्वर पापलेट", "बम्बिल", "तारली"].join(", ");
+        if (isTimingSpecific) {
+          body = `⏰ **मछली पकड़ने का सर्वोत्तम समय**: सुबह 05:00 से 09:30 बजे तक (सुबह के ज्वार का अनुकूल समय)।\n\n🌊 **सागरी व ज्वार स्थिति**: अगला उच्च ज्वार ${d.tide_ht} और निम्न ज्वार ${d.tide_lt} पर है। तापमान ${sst_val}°C और लहरें ${wave_val} मीटर हैं।\n🐟 **प्रमुख संभावित प्रजातियाँ (CMFRI डेटा)**: ${speciesHi}।\n• अनुशंसित गियर: पेलाजिक ड्रिफ्ट नेट व गिलनेट\n• परिचालन गहराई: 15 - 45 मीटर`;
+        } else {
+          body = `उपग्रह रिमोट सेंसिंग के अनुसार ${regNameHi} के 15-35 किमी पश्चिम में अपतटीय क्षेत्र सबसे अच्छा मछली पकड़ने का क्षेत्र (**उच्च संभावित मत्स्य क्षेत्र - PFZ**) है। यहाँ क्लोरोफिल घनत्व ${chloro_val} मि.ग्रा./घन मीटर और समुद्री सतह का तापमान ${sst_val}°C है।\n\n🐟 **संभावित स्थानीय प्रजातियाँ (CMFRI डेटा)**: ${speciesHi}।\n• परिचालन गहराई: 15 - 45 मीटर शेल्फ समोच्च\n• अनुशंसित गियर: पेलाजिक ड्रिफ्ट नेट व गिलनेट\n• सबसे अनुकूल समय: सुबह 05:00 से 09:30 बजे तक`;
+        }
+      } else if (isStormSpecific || intent === "weather") {
+        if (has_storm_warning) {
+          body = `⚠️ **तूफान चेतावनी**: ${regNameHi} में मौसम विभाग द्वारा तूफान की चेतावनी जारी है। हवा की गति ${wind_val} समुद्री मील और लहरें ${wave_val} मीटर हैं। मछुआरों को समुद्र में जाने से बचने की सलाह दी जाती है।`;
+        } else {
+          body = `✅ **तूफान का कोई अलर्ट नहीं**: वर्तमान में ${regNameHi} क्षेत्र में तूफान अथवा चक्रवात की कोई चेतावनी नहीं है। मौसम ${condHi} है। हवा की गति ${wind_val} समुद्री मील और लहरों की ऊंचाई ${wave_val} मीटर सामान्य स्तर पर है।`;
+        }
       } else if (intent === "gis") {
         body = `आप अंतर्राष्ट्रीय सीमा से ${d.imbl} किमी दूर हैं। स्थानीय प्रतिबंधित क्षेत्र ${d.restricted_zone} है।`;
       } else if (intent === "safety") {
-        body = `सुरक्षा श्रेणी ${safety_level} (जोखिम स्तर: ${final_danger_score}/100) है। लहर की ऊंचाई ${wave_val} मीटर और हवा की गति ${wind_val} समुद्री मील है।`;
+        const verdict = safety_level === "SAFE" ? "हाँ, आज समुद्र में जाना सुरक्षित है।" : "आज समुद्र में जाने के लिए सावधानी आवश्यक है।";
+        body = `🛡️ **सुरक्षा निर्णय**: ${verdict}\n\n• सुरक्षा स्थिति: **${dangerHi}** (जोखिम स्तर: ${final_danger_score}/100)\n• लहरों की ऊंचाई: ${wave_val} मीटर | हवा की गति: ${wind_val} समुद्री मील\n• मौसम स्थिति: ${condHi} | अंतर्राष्ट्रीय सीमा से दूरी: ${d.imbl} किमी`;
       } else {
-        body = `सुरक्षा स्तर ${safety_level} है। वर्तमान लहर की ऊंचाई ${wave_val} मीटर और हवा की गति ${wind_val} समुद्री मील है। क्लोरोफिल स्तर ${chloro_val} mg/m³ है।`;
+        body = `सुरक्षा स्तर ${dangerHi} है। वर्तमान लहर की ऊंचाई ${wave_val} मीटर और हवा की गति ${wind_val} समुद्री मील है। क्लोरोफिल स्तर ${chloro_val} मि.ग्रा./घन मीटर है।`;
       }
 
       if (activeReports.length > 0) {
-        body += `\n\n👥 **स्थानीय मछुआरा रिपोर्ट**: यहाँ ${activeReports.length} हालिया रिपोर्ट मिली हैं। ताज़ा जानकारी: "${activeReports[0].text}" (${activeReports[0].timestamp}).`;
+        const rep = activeReports[0];
+        body += `\n\n👥 **स्थानीय मछुआरा रिपोर्ट**: यहाँ ${activeReports.length} हालिया रिपोर्ट मिली हैं। ताज़ा जानकारी: "${rep.text_hi || rep.text}" (${rep.timestamp_hi || rep.timestamp})।`;
       }
 
       finalAnswer = `${intro}\n\n${body}`;
 
     } else { // Marathi (mr)
-      const intro = is_explicit_loc 
-        ? `${d.name} किनारपट्टीवरील ${time_suffix_mr} अहवाल:`
-        : `आपल्या चौकशीचा ${time_suffix_mr} अहवाल:`;
+      const time_prefix_mr = time_ctx.mr ? `${time_ctx.mr} च्या माहितीनुसार ` : "";
+      const intro = `${time_prefix_mr}${regNameMr} अहवाल:`;
       let body = "";
 
       if (intent === "tide") {
         body = `भरती-ओहोटीचे वेळापत्रक: पुढील भरती ${d.tide_ht} वाजता आणि ओहोटी ${d.tide_lt} वाजता असेल.`;
       } else if (intent === "fish") {
-        body = `मासेमारी संभाव्यता: उपग्रहानुसार क्लोरोफिल पातळी ${chloro_val} mg/m³ असून हा परिसर संभाव्य मासेमारी क्षेत्र (PFZ) बनला आहे. सागरी पाण्याचे तापमान ${sst_val}°C आहे.\n\n🐟 **स्थानिक संभाव्य मासे (CMFRI नोंद)**: ${speciesObj.primarySpecies.join(", ")}.\n• कार्यरत खोली: ${speciesObj.depthRangeMeters}\n• शिफारस केलेले जाळे: ${speciesObj.recommendedGear}\n• सर्वोत्तम वेळ: ${speciesObj.catchWindow}`;
-      } else if (intent === "weather") {
-        body = `हवामानाविषयी: वाऱ्याचा वेग ${wind_val} नॉट्स असून लाटांची उंची ${wave_val} मीटर आहे.`;
+        const speciesMr = ["बांगडा (मॅकरेल)", "पापलेट", "बोंबील", "तारली"].join(", ");
+        if (isTimingSpecific) {
+          body = `⏰ **मासेमारीसाठी सर्वोत्तम वेळ**: पहाटे ०५:०० ते सकाळी ०९:३० वाजेपर्यंत आहे (भरतीच्या प्रवाहाचा अनुकूल काळ).\n\n🌊 **सागरी व भरती स्थिती**: पुढील भरती ${d.tide_ht} वाजता आणि ओहोटी ${d.tide_lt} वाजता आहे. सागरी तापमान ${sst_val}°C आणि लाटांची उंची ${wave_val} मीटर आहे.\n🐟 **स्थानिक संभाव्य मासे (CMFRI अभ्यास)**: ${speciesMr}.\n• शिफारस केलेले जाळे: ड्रिफ्ट नेट आणि गिलनेट\n• कार्यरत खोली: 15 - 45 मीटर सागरी खोली`;
+        } else {
+          body = `उपग्रह नोंदींनुसार ${regNameMr} किनाऱ्यापासून १५-३५ किमी पश्चिम पट्ट्यात **उच्च संभाव्य मासेमारी क्षेत्र (PFZ)** आहे. येथे क्लोरोफिल पातळी ${chloro_val} mg/m³ आणि समुद्राचे तापमान ${sst_val}°C आहे.\n\n🐟 **स्थानिक संभाव्य मासे (CMFRI नोंद)**: ${speciesMr}.\n• कार्यरत खोली: 15 - 45 मीटर सागरी खोली\n• शिफारस केलेले जाळे: ड्रिफ्ट नेट आणि गिलनेट\n• सर्वोत्तम वेळ: पहाटे ०५:०० ते सकाळी ०९:३० वाजेपर्यंत`;
+        }
+      } else if (isStormSpecific || intent === "weather") {
+        if (has_storm_warning) {
+          body = `⚠️ **वादळाचा इशारा**: ${regNameMr} भागात सध्या वादळी हवामानाचा इशारा जारी आहे. वाऱ्याचा वेग ${wind_val} नॉट्स आणि लाटांची उंची ${wave_val} मीटर आहे. मच्छीमारांनी समुद्रात जाणे टाळावे.`;
+        } else {
+          body = `✅ **वादळाचा कोणताही इशारा नाही**: सध्या ${regNameMr} परिसरात वादळाचा अथवा चक्रीवादळाचा कोणताही इशारा नाही. हवामान ${condMr} आहे. वाऱ्याचा वेग ${wind_val} नॉट्स आणि लाटांची उंची ${wave_val} मीटर सुरक्षित मर्यादेत आहे.`;
+        }
       } else if (intent === "gis") {
         body = `आन्तरराष्ट्रीय सागरी सीमेपासूनचे अंतर ${d.imbl} किमी असून आपण सुरक्षित भागात आहात.`;
       } else if (intent === "safety") {
-        body = `सुरक्षा पातळी ${safety_level} (जोखिम निर्देशांक: ${final_danger_score}/100) आहे. लाटांची उंची ${wave_val} मी आणि वारे ${wind_val} नॉट्स आहेत.`;
+        const verdict = safety_level === "SAFE" ? "होय, आज समुद्रात जाणे पूर्णपणे सुरक्षित आहे." : "आज समुद्रात जाताना सावधगिरी बाळगावी.";
+        body = `🛡️ **सुरक्षा निष्कर्ष**: ${verdict}\n\n• सुरक्षा पातळी: **${dangerMr}** (जोखिम निर्देशांक: ${final_danger_score}/100)\n• लाटांची उंची: ${wave_val} मीटर | वाऱ्याचा वेग: ${wind_val} नॉट्स\n• हवामान: ${condMr} | आंतरराष्ट्रीय सीमेपासून अंतर: ${d.imbl} किमी`;
       } else {
-        body = `आज सुरक्षा निर्देशांक ${safety_level} आहे. लाटा ${wave_val} मी आणि वारे ${wind_val} नॉट्स आहेत. क्लोरोफिल पातळी ${chloro_val} mg/m³ आहे.`;
+        body = `आज सुरक्षा निर्देशांक ${dangerMr} आहे. लाटा ${wave_val} मी आणि वारे ${wind_val} नॉट्स आहेत. क्लोरोफिल पातळी ${chloro_val} mg/m³ आहे.`;
       }
 
       if (activeReports.length > 0) {
-        body += `\n\n👥 **मच्छीमार समुदाय अहवाल**: या भागात ${activeReports.length} समुदाय नोंदी आहेत. ताजी नोंद: "${activeReports[0].text}" (${activeReports[0].timestamp}).`;
+        const rep = activeReports[0];
+        body += `\n\n👥 **मच्छीमार समुदाय अहवाल**: या भागात ${activeReports.length} समुदाय नोंदी आहेत. ताजी नोंद: "${rep.text_mr || rep.text}" (${rep.timestamp_mr || rep.timestamp})।`;
       }
 
       finalAnswer = `${intro}\n\n${body}`;

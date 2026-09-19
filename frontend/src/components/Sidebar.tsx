@@ -17,6 +17,7 @@ import {
   X,
   Fish
 } from "lucide-react";
+import DataModeToggle from "@/components/DataModeToggle";
 
 interface SidebarProps {
   onOpenSettings?: () => void;
@@ -230,15 +231,8 @@ export default function Sidebar({ onOpenSettings, onCloseMobile, isMobile = fals
           <span className="text-blue-900 font-bold">Active</span>
         </div>
 
-        <div className="flex items-center justify-between px-1 text-[10px] font-mono text-slate-400">
-          <div className="flex items-center gap-1.5">
-            <Radio className="h-3 w-3 text-amber-600" />
-            <span>Telemetry Mode</span>
-          </div>
-          <span className="text-amber-700 font-semibold bg-amber-50 px-1 rounded border border-amber-200/60">
-            Demo AIS
-          </span>
-        </div>
+        {/* Data Mode: Simulated | Live Labeled Toggle */}
+        <DataModeToggle compact={true} />
       </div>
     </aside>
   );

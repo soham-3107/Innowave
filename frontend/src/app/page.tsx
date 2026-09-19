@@ -5,6 +5,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Compass, Navigation, ShieldAlert, AlertTriangle, RefreshCw, Anchor, MessageSquare, AlertCircle, FileText, Fish } from "lucide-react";
 import { REGION_SPECIES } from "@/data/speciesData";
+import DataModeToggle from "@/components/DataModeToggle";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -397,7 +398,10 @@ export default function HomeDashboard() {
             </h3>
 
             {/* Top Toolbar Controls */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Labeled Data Mode Toggle: Simulated | Live */}
+              <DataModeToggle />
+
               {/* Species Layer Toggle */}
               <button
                 onClick={() => {
