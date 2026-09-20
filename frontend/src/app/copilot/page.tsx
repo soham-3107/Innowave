@@ -20,7 +20,7 @@ import {
   VolumeX
 } from "lucide-react";
 
-import { REGION_SPECIES } from "@/data/speciesData";
+import { REGION_SPECIES, GLOBAL_SPECIES_PROFILES } from "@/data/speciesData";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -432,7 +432,26 @@ export default function CopilotPage() {
     else if (isMorning) time_ctx = { key: "morning", en: "morning", hi: "सुबह", mr: "सकाळी" };
     else if (isEvening) time_ctx = { key: "evening", en: "evening", hi: "शाम", mr: "संध्याकाळी" };
 
-    // 4. Granular Intent Detection
+    // 4. Granular Intent Detection (Priority Order)
+    const isSmallBoat = ["small boat", "small fishing boat", "25 km/h", "25 kmph", "25 किमी", "छोटी नाव", "लहान बोट", "हवा 25", "vara 25", "25 km"].some(w => textLower.includes(w)) ||
+      (textLower.includes("small") && (textLower.includes("boat") || textLower.includes("wind") || textLower.includes("offshore")));
+    
+    const isPfzDiscrepancy = ["different from where", "actually catching", "difference between", "why might the predicted", "discrepancy", "अंतर क्यों", "अलग क्यों", "वास्तविक मछली", "फरक का", "प्रत्यक्ष मासेमारी"].some(w => textLower.includes(w)) ||
+      (textLower.includes("predicted") && textLower.includes("different"));
+
+    const isPfzExplanation = ["why you recommended", "why recommended", "why this zone", "reason for this zone", "explain why", "यह क्षेत्र क्यों", "सिफारिश क्यों", "हे क्षेत्र का", "हे क्षेत्र का निवडले"].some(w => textLower.includes(w)) ||
+      (textLower.includes("why") && (textLower.includes("recommended") || textLower.includes("fishing zone") || textLower.includes("zone")));
+
+    const isTripAdvisory = ["should i go fishing tomorrow", "can i go fishing tomorrow", "weather, wind, wave height and sea conditions", "should i go", "go tomorrow", "कल मछली पकड़ने जाना चाहिए", "क्या कल जाना चाहिए", "उद्या मासेमारीला जावे का", "उद्या जावे का"].some(w => textLower.includes(w)) ||
+      ((textLower.includes("tomorrow") || textLower.includes("कल") || textLower.includes("उद्या")) && (textLower.includes("fishing") || textLower.includes("go") || textLower.includes("जाना") || textLower.includes("जावे")));
+
+    const isTuna = ["tuna", "टुना", "टूना", "yellowfin", "skipjack"].some(w => textLower.includes(w));
+    const isPomfret = ["pomfret", "पापलेट", "हलवा", "सिल्वर पापलेट"].some(w => textLower.includes(w));
+    const isSurmai = ["surmai", "सुरमई", "kingfish", "seer fish", "इसवण"].some(w => textLower.includes(w));
+    const isMackerel = ["mackerel", "बांगडा", "बांगड़ा", "bangda"].some(w => textLower.includes(w));
+    const isGhol = ["ghol", "घोल", "croaker", "blackspotted"].some(w => textLower.includes(w));
+    const isFishSpecies = isTuna || isPomfret || isSurmai || isMackerel || isGhol || ["sardine", "prawn", "squid", "तारली", "कोळंबी", "झींगा", "माकली", "रिबनफिश", "species", "bait", "मछली", "मासा"].some(w => textLower.includes(w));
+
     const isEmergency = ["emergency", "sos", "helpline", "coast guard", "distress", "rescue", "help number", "आपत्कालीन", "मदत", "कोस्ट गार्ड", "नंबर", "आपातकालीन", "तटरक्षक"].some(w => textLower.includes(w));
     const isMarket = ["price", "prices", "rate", "rates", "cost", "market", "demand", "auction", "diesel", "fuel", "दाम", "भाव", "बाजारभाव", "कीमत", "मूल्य", "डीजल", "डिझेल", "इंधन"].some(w => textLower.includes(w));
     const isGear = ["gear", "net", "nets", "mesh", "gillnet", "trawl", "hooks", "जाळे", "मेश", "गियर", "नेट", "जाल", "कांटा"].some(w => textLower.includes(w));
@@ -445,10 +464,13 @@ export default function CopilotPage() {
     const isCommunity = ["community", "other fishermen", "reports", "crowd", "recent catch", "अहवाल", "मच्छीमार नोंदी", "मछुआरों की रिपोर्ट"].some(w => textLower.includes(w));
     const isTiming = ["best time", "timing", "departure", "when to go", "सर्वोत्तम वेळ", "कधी जावे", "अनुकूल समय", "कब जाना"].some(w => textLower.includes(w));
     const isSafe = ["safe", "safety", "danger", "warning", "सुरक्षित", "धोका", "खतरा", "इशारा", "चेतावनी"].some(w => textLower.includes(w));
-    const isFishSpecies = ["pomfret", "surmai", "tuna", "mackerel", "sardine", "prawn", "ghol", "squid", "पापलेट", "सुरमई", "टुना", "टूना", "बांगडा", "बांगड़ा", "तारली", "कोळंबी", "झींगा", "घोल"].some(w => textLower.includes(w));
 
     let intent = "general";
-    if (isEmergency) intent = "emergency";
+    if (isSmallBoat) intent = "small_boat_safety";
+    else if (isPfzDiscrepancy) intent = "pfz_discrepancy";
+    else if (isPfzExplanation) intent = "pfz_explanation";
+    else if (isTripAdvisory) intent = "trip_advisory";
+    else if (isEmergency) intent = "emergency";
     else if (isMarket) intent = "market";
     else if (isFishSpecies) intent = "species_profile";
     else if (isGear) intent = "gear";
@@ -516,25 +538,25 @@ export default function CopilotPage() {
 
     simulatedTrace.push({ agent: "Planner Agent", status: "completed", message: `Query classified under **${intent.toUpperCase()}** domain. Dynamic multi-agent routing active.` });
 
-    if (["weather", "storm", "safety", "general"].includes(intent)) {
+    if (["weather", "storm", "safety", "trip_advisory", "small_boat_safety", "general"].includes(intent)) {
       simulatedTrace.push({ agent: "Weather Agent", status: "completed", message: `Atmospheric scan: Wind speed **${wind_val} knots** (${d.wind_dir}), Gusts **${d.wind_gusts} kts**, Barometer: **${d.barometer} hPa**.` });
     }
-    if (["wave", "safety", "general"].includes(intent)) {
+    if (["wave", "safety", "trip_advisory", "small_boat_safety", "general"].includes(intent)) {
       simulatedTrace.push({ agent: "Ocean Agent", status: "completed", message: `Hydrodynamic check: Swells **${wave_val}m** (Period: **${d.swell_period}s**). Current speed: **${d.current_spd} kts** (${d.current_dir}). Sea State: **${d.sea_state}**.` });
     }
-    if (["satellite", "species_profile", "market", "general"].includes(intent)) {
+    if (["satellite", "species_profile", "market", "pfz_discrepancy", "pfz_explanation", "general"].includes(intent)) {
       simulatedTrace.push({ agent: "Satellite Agent", status: "completed", message: `Remote Sensing: Chlorophyll-a evaluated at **${chloro_val} mg/m³**, SST at **${sst_val}°C**.` });
     }
-    if (["tide", "timing", "general"].includes(intent)) {
+    if (["tide", "timing", "trip_advisory", "general"].includes(intent)) {
       simulatedTrace.push({ agent: "Tide Agent", status: "completed", message: `Tidal Telemetry: High Tide: **${d.tide_ht}**, Low Tide: **${d.tide_lt}**. Slack: **${d.slack_window}**.` });
     }
-    if (["gis", "safety", "emergency"].includes(intent)) {
+    if (["gis", "safety", "emergency", "small_boat_safety", "pfz_explanation"].includes(intent)) {
       simulatedTrace.push({ agent: "GIS Agent", status: "completed", message: `Geospatial scan: Boundary line distance: **${d.imbl} km**. Sector: **${d.restricted_zone}**.` });
     }
-    if (["market"].includes(intent)) {
+    if (["market", "species_profile"].includes(intent)) {
       simulatedTrace.push({ agent: "Economic Agent", status: "completed", message: `Economic audit: Loaded dockside price matrices and fuel optimization vector.` });
     }
-    if (["emergency", "safety"].includes(intent)) {
+    if (["emergency", "safety", "trip_advisory", "small_boat_safety"].includes(intent)) {
       simulatedTrace.push({ agent: "Safety & Rescue Agent", status: "completed", message: `Distress Readiness: Coast Guard Helpline **${d.emergency_helpline}** & **${d.mrcc_vhf}** verified.` });
     }
     if (activeReports.length > 0) {
@@ -552,104 +574,339 @@ export default function CopilotPage() {
     const dangerHi = safety_level === "SAFE" ? "पूर्णतः सुरक्षित" : safety_level === "CAUTION" ? "सावधानी बरतें (मध्यम जोखिम)" : "खतरा / असुरक्षित";
     const dangerMr = safety_level === "SAFE" ? "पूर्णपणे सुरक्षित" : safety_level === "CAUTION" ? "सावधगिरी बाळगा (मध्यम धोका)" : "धोकादायक / असुरक्षित";
 
-    if (detectedLang === "en") {
-      const time_prefix = time_ctx.en ? `for **${time_ctx.en}**` : "";
-      const intro = `Regarding your inquiry about ${d.name} ${time_prefix}:`.trim();
-      let body = "";
+    // Species profile selection
+    let targetSpeciesKey = "tuna";
+    if (isPomfret) targetSpeciesKey = "pomfret";
+    else if (isSurmai) targetSpeciesKey = "surmai";
+    else if (isMackerel) targetSpeciesKey = "mackerel";
+    else if (isGhol) targetSpeciesKey = "ghol";
+    const spProfile = GLOBAL_SPECIES_PROFILES[targetSpeciesKey] || GLOBAL_SPECIES_PROFILES.tuna;
 
-      if (intent === "market") {
+    if (detectedLang === "en") {
+      if (intent === "trip_advisory") {
+        const goVerdict = safety_level === "SAFE" 
+          ? "✅ **YES, CONDITIONS ARE FAVORABLE FOR FISHING TOMORROW.**"
+          : safety_level === "CAUTION"
+          ? "⚠️ **CAUTION: CONDITIONAL GO FOR TOMORROW — NEARSHORE ONLY.**"
+          : "🚫 **NO-GO: DO NOT VENTURE OUT TOMORROW DUE TO HAZARDOUS CONDITIONS.**";
+
+        finalAnswer = `${goVerdict}\n\nHere is your comprehensive tomorrow fishing advisory for **${d.name}**:\n\n` +
+          `1. 🌤️ **Weather & Wind Conditions**:\n` +
+          `  • **Wind Speed**: **${wind_val} knots** (~${Math.round(wind_val * 1.852)} km/h) from **${d.wind_dir}**\n` +
+          `  • **Gusts**: Peaking up to **${d.wind_gusts} knots**\n` +
+          `  • **Sky & Atmospheric Pressure**: ${d.condition}, Barometer: **${d.barometer} hPa** (Stable)\n` +
+          `  • **Visibility**: **${d.visibility_nm} NM** (Good ocean horizon)\n\n` +
+          `2. 🌊 **Waves & Sea State**:\n` +
+          `  • **Significant Wave Height**: **${wave_val} meters**\n` +
+          `  • **Swell Period**: **${d.swell_period} seconds** heading ${d.swell_dir}\n` +
+          `  • **Sea State Severity**: **${d.sea_state}** (Safe for motorized/mechanized crafts)\n` +
+          `  • **Surface Drift Current**: **${d.current_spd} knots** towards ${d.current_dir}\n\n` +
+          `3. ⏳ **High/Low Tide & Departure Slack Window**:\n` +
+          `  • 🔺 **High Tide 1**: ${d.tide_ht} | 🔻 **Low Tide 1**: ${d.tide_lt}\n` +
+          `  • 🔺 **High Tide 2**: ${d.tide_ht2} | 🔻 **Low Tide 2**: ${d.tide_lt2}\n` +
+          `  • 🎯 **Optimal Harbor Exit Window**: **${d.slack_window}** (Minimum harbor tidal turbulence)\n\n` +
+          `4. 🛡️ **Safety Checklist Before Departure**:\n` +
+          `  • Wear ISI-approved Lifejackets for all crew members\n` +
+          `  • Test VHF Marine Radio on **${d.mrcc_vhf}**\n` +
+          `  • Check GPS / NavIC unit and keep Indian Coast Guard Toll-Free helpline saved: **${d.emergency_helpline}**`;
+
+      } else if (intent === "species_profile") {
+        finalAnswer = `🐟 **Comprehensive Target Species Guide: ${spProfile.name}**\n\n` +
+          `1. 📍 **Target Location & Offshore Distance**:\n` +
+          `  • ${spProfile.location}\n\n` +
+          `2. 🌊 **Optimal Water Depth**:\n` +
+          `  • **${spProfile.depth}**\n\n` +
+          `3. 🪱 **Recommended Bait, Lures & Tackle**:\n` +
+          `  • **Bait & Lures**: ${spProfile.bait}\n` +
+          `  • **Recommended Gear**: ${spProfile.gear}\n\n` +
+          `4. 🌤️ **Ideal Weather, Temperature & Sea Conditions**:\n` +
+          `  • **Optimal Sea Surface Temp (SST)**: **${spProfile.temp_opt}**\n` +
+          `  • **Conditions**: ${spProfile.weather}\n\n` +
+          `5. 💰 **Dockside Market Value & Preservation**:\n` +
+          `  • **Estimated Market Price**: **${spProfile.market_price}**\n` +
+          `  • **Preservation Tip**: 1:1 ice slurry ratio immediately upon landing to prevent histamines.`;
+
+      } else if (intent === "small_boat_safety") {
+        finalAnswer = `⚠️ **SAFETY ADVISORY: SMALL BOATS IN 25 KM/H WIND**\n\n` +
+          `**Verdict: EXTREME CAUTION — DO NOT VENTURE OFFSHORE IN A SMALL BOAT.**\n\n` +
+          `1. 💨 **Why 25 km/h Wind (~13.5 Knots) is Risky for Small Boats**:\n` +
+          `  • 25 km/h winds produce **1.2 to 1.8 meter choppy, short-period waves** with frequent whitecaps.\n` +
+          `  • Small FRP fiber boats and traditional canoes have low freeboard (< 0.6m). Steep waves can easily wash over the gunwales and flood the bilge.\n` +
+          `  • Outboard motors (OBMs) risk cavitation or drowning when the stern lifts in choppy sea swells.\n\n` +
+          `2. ⚓ **Safe Operational Boundary for Small Crafts**:\n` +
+          `  • **Stay within 3 to 5 Nautical Miles (5 - 9 km) of the coastline / sheltered bays** where waves are dampened.\n` +
+          `  • **Strictly avoid deep offshore waters (> 10 NM)** where wind gusts exceed 35 km/h with no shelter.\n\n` +
+          `3. 🛡️ **Mandatory Small-Boat Safety Rules**:\n` +
+          `  • Every crew member MUST wear a strapped lifejacket before leaving the jetty.\n` +
+          `  • Carry a manual bailer/bucket and a working bilge pump.\n` +
+          `  • Travel in a buddy system (at least 2 boats together).\n` +
+          `  • Return to harbor immediately if wind shifts or dark squall clouds approach.\n` +
+          `  • Coast Guard Emergency: **${d.emergency_helpline}** (VHF Ch 16).`;
+
+      } else if (intent === "pfz_discrepancy") {
+        finalAnswer = `🔍 **Why Predicted Fishing Zones (PFZ) Might Differ From Actual Catch**\n\n` +
+          `Satellite PFZ advisories identify high-probability zones, but real-world catch variations occur due to 5 key oceanographic factors:\n\n` +
+          `1. ⏱️ **Satellite Data Time-Lag (12 to 24 Hours)**:\n` +
+          `  • Satellites (MODIS, Oceansat, Sentinel) capture ocean surface images once or twice daily. Strong currents drift the plankton bloom **5 to 15 km away** before boats arrive.\n\n` +
+          `2. 🌊 **Surface Plankton vs. Deep Thermocline Depth**:\n` +
+          `  • Satellites only measure the **top 1 meter (ocean skin)**. Pelagic fish (like Tuna and Pomfret) often feed **20 to 60 meters deep** below the thermocline where water temperature is comfortable.\n\n` +
+          `3. 🐟 **Biological Food Chain Delay (Plankton → Small Fish → Predators)**:\n` +
+          `  • High chlorophyll means abundant microscopic plant plankton. It takes **2 to 4 days** for zooplankton and small fish (sardines/anchovies) to gather, and only then do larger predators (Tuna, Surmai) arrive.\n\n` +
+          `4. 🚤 **Boat Engine Noise & Vessel Concentration**:\n` +
+          `  • When many mechanized trawlers gather in the exact same PFZ coordinate, propeller noise and net disturbances scatter shoals into deeper waters.\n\n` +
+          `5. ☁️ **Monsoon Cloud Cover & Interpolation Gaps**:\n` +
+          `  • Thick cloud cover blocks optical satellite sensors, causing forecasting algorithms to interpolate data from adjacent sectors.\n\n` +
+          `💡 **Pro-Tip for Fishermen**: Use PFZ as a starting boundary. Once in the zone, follow **bird feeding frenzies**, water color convergence lines, and depth sonar for the highest catch rate.`;
+
+      } else if (intent === "pfz_explanation") {
+        finalAnswer = `🧠 **Multi-Agent Explainability: Why We Recommended This Fishing Zone**\n\n` +
+          `Our multi-agent marine intelligence system recommended this zone near **${d.name}** through 5 verified layers of scientific evidence:\n\n` +
+          `1. 🛰️ **High Chlorophyll-a & Plankton Biomass**:\n` +
+          `  • Remote sensing indicates a rich chlorophyll-a concentration of **${chloro_val} mg/m³**, indicating active marine primary productivity and micro-algae blooms that attract forage baitfish.\n\n` +
+          `2. 🌡️ **Sea Surface Temperature (SST) & Thermal Front Upwelling**:\n` +
+          `  • SST is measured at **${sst_val}°C**. The thermal gradient shows nutrient-rich cold water welling up from the deep seabed, creating an ideal temperature convergence boundary for pelagic schools.\n\n` +
+          `3. 🗺️ **Continental Shelf Bathymetry**:\n` +
+          `  • The zone lies along depth contours where submarine ridges funnel nutrient-dense currents upwards, naturally trapping shoaling pelagics.\n\n` +
+          `4. 🛡️ **Weather & Maritime Boundary (IMBL) Safety Clearance**:\n` +
+          `  • The zone maintains a safe distance of **${d.imbl} km** from international maritime boundaries and restricted naval channels, with calm to moderate waves (**${wave_val}m**) and safe wind speeds (**${wind_val} knots**).\n\n` +
+          `5. 👥 **Community & Historical Catch Validation**:\n` +
+          `  • Recent reports from regional fishing cooperatives confirm healthy catches of ${(d.species_primary || []).slice(0, 3).join(", ")}.`;
+
+      } else if (intent === "market") {
         const pricesList = Object.entries(d.prices || {}).map(([k, v]) => `  • **${k}**: ${v}`).join("\n");
-        body = `💰 **Dockside Market Rates & Economics (${d.name})**:\n\n**Current Estimated Fish Auction Rates**:\n${pricesList}\n\n⛽ **Fuel Optimization**: ${d.fuel_tip}\n🧊 **Preservation**: 1:1 ice to fish ratio recommended.`;
+        finalAnswer = `💰 **Dockside Market Rates & Economics (${d.name})**:\n\n**Current Estimated Fish Auction Rates**:\n${pricesList}\n\n⛽ **Fuel Optimization**: ${d.fuel_tip}\n🧊 **Preservation**: 1:1 ice to fish ratio recommended.`;
       } else if (intent === "emergency") {
-        body = `🚨 **Emergency Helplines & Maritime Safety Protocol (${d.name})**:\n\n• 📞 **Indian Coast Guard 24x7 Helpline**: **${d.emergency_helpline}**\n• 📻 **International VHF Distress**: **${d.mrcc_vhf}**\n• 👮 **Coastal Police**: **1093**\n\n**Mandatory Safety Checklist**:\n  ✅ Lifejackets for all crew\n  ✅ VHF Radio tested on Channel 16\n  ✅ NavIC / GPS with active anchor alarm\n  ✅ Emergency distress flares and fresh water`;
+        finalAnswer = `🚨 **Emergency Helplines & Maritime Safety Protocol (${d.name})**:\n\n• 📞 **Indian Coast Guard 24x7 Helpline**: **${d.emergency_helpline}**\n• 📻 **International VHF Distress**: **${d.mrcc_vhf}**\n• 👮 **Coastal Police**: **1093**\n\n**Mandatory Safety Checklist**:\n  ✅ Lifejackets for all crew\n  ✅ VHF Radio tested on Channel 16\n  ✅ NavIC / GPS with active anchor alarm\n  ✅ Emergency distress flares and fresh water`;
       } else if (intent === "wave") {
-        body = `🌊 **Hydrodynamics & Sea State Analysis for ${d.name}**:\n\n• **Significant Wave Height**: **${wave_val} meters**\n• **Swell Period & Heading**: **${d.swell_period} seconds** from **${d.swell_dir}**\n• **Surface Drift Current**: **${d.current_spd} knots** heading ${d.current_dir}\n• **Sea State Severity**: **${d.sea_state}** (SST: ${sst_val}°C)`;
+        finalAnswer = `🌊 **Hydrodynamics & Sea State Analysis for ${d.name}**:\n\n• **Significant Wave Height**: **${wave_val} meters**\n• **Swell Period & Heading**: **${d.swell_period} seconds** from **${d.swell_dir}**\n• **Surface Drift Current**: **${d.current_spd} knots** heading ${d.current_dir}\n• **Sea State Severity**: **${d.sea_state}** (SST: ${sst_val}°C)`;
       } else if (intent === "weather") {
-        body = `🌤️ **Atmospheric & Weather Telemetry for ${d.name}**:\n\n• **Wind Speed**: **${wind_val} knots** from ${d.wind_dir} (Gusts: **${d.wind_gusts} kts**)\n• **Barometer**: **${d.barometer} hPa** (Steady)\n• **Air Temp & Humidity**: ${sst_val}°C | ${d.humidity}%\n• **Conditions**: ${d.condition} (Visibility: ${d.visibility_nm} NM)`;
+        finalAnswer = `🌤️ **Atmospheric & Weather Telemetry for ${d.name}**:\n\n• **Wind Speed**: **${wind_val} knots** from ${d.wind_dir} (Gusts: **${d.wind_gusts} kts**)\n• **Barometer**: **${d.barometer} hPa** (Steady)\n• **Air Temp & Humidity**: ${sst_val}°C | ${d.humidity}%\n• **Conditions**: ${d.condition} (Visibility: ${d.visibility_nm} NM)`;
       } else if (intent === "storm") {
         if (has_storm_warning) {
-          body = `⚠️ **STORM & CYCLONE ALERT**: Active storm advisory in effect for ${d.name}!\n\n• Wind Speed: **${wind_val} knots** with squall gusts to **${d.wind_gusts} kts**\n• Wave Swells: **${wave_val}m** (${d.sea_state})\n• Barometer: **${d.barometer} hPa** (Falling)\n🛡️ **Advisory**: Fishermen are strictly advised NOT to venture into sea.`;
+          finalAnswer = `⚠️ **STORM & CYCLONE ALERT**: Active storm advisory in effect for ${d.name}!\n\n• Wind Speed: **${wind_val} knots** with squall gusts to **${d.wind_gusts} kts**\n• Wave Swells: **${wave_val}m** (${d.sea_state})\n• Barometer: **${d.barometer} hPa** (Falling)\n🛡️ **Advisory**: Fishermen are strictly advised NOT to venture into sea.`;
         } else {
-          body = `✅ **NO STORM ALERT**: No active storm or cyclone warnings for ${d.name}.\n\n• Conditions: ${d.condition} | Winds: ${wind_val} knots | Waves: ${wave_val}m`;
+          finalAnswer = `✅ **NO STORM ALERT**: No active storm or cyclone warnings for ${d.name}.\n\n• Conditions: ${d.condition} | Winds: ${wind_val} knots | Waves: ${wave_val}m`;
         }
       } else if (intent === "tide") {
-        body = `⏳ **Tidal Schedule & Navigation Window (${d.name})**:\n\n• 🔺 **High Tide 1**: ${d.tide_ht} | 🔻 **Low Tide 1**: ${d.tide_lt}\n• 🔺 **High Tide 2**: ${d.tide_ht2} | 🔻 **Low Tide 2**: ${d.tide_lt2}\n• **Optimal Slack Navigation Window**: ${d.slack_window}`;
+        finalAnswer = `⏳ **Tidal Schedule & Navigation Window (${d.name})**:\n\n• 🔺 **High Tide 1**: ${d.tide_ht} | 🔻 **Low Tide 1**: ${d.tide_lt}\n• 🔺 **High Tide 2**: ${d.tide_ht2} | 🔻 **Low Tide 2**: ${d.tide_lt2}\n• **Optimal Slack Navigation Window**: ${d.slack_window}`;
       } else if (intent === "satellite") {
-        body = `🛰️ **Satellite Oceanography & Thermal PFZ Analysis (${d.name})**:\n\n• **Chlorophyll-a Density**: **${chloro_val} mg/m³**\n• **Sea Surface Temperature (SST)**: **${sst_val}°C**\n• **Thermal Front**: Convergence boundary located 20-35 km offshore`;
+        finalAnswer = `🛰️ **Satellite Oceanography & Thermal PFZ Analysis (${d.name})**:\n\n• **Chlorophyll-a Density**: **${chloro_val} mg/m³**\n• **Sea Surface Temperature (SST)**: **${sst_val}°C**\n• **Thermal Front**: Convergence boundary located 20-35 km offshore`;
       } else if (intent === "gear") {
-        body = `🎣 **Recommended Gear & Net Configuration for ${d.name}**:\n\n• **Primary Gear**: Pelagic Drift Nets & Gillnets\n• **Mesh Size**: 35-45mm for shoaling pelagics, 120-140mm for large pomfret/surmai\n• **Target Species**: ${(d.species_primary || []).join(", ")}`;
+        finalAnswer = `🎣 **Recommended Gear & Net Configuration for ${d.name}**:\n\n• **Primary Gear**: Pelagic Drift Nets & Gillnets\n• **Mesh Size**: 35-45mm for shoaling pelagics, 120-140mm for large pomfret/surmai\n• **Target Species**: ${(d.species_primary || []).join(", ")}`;
       } else if (intent === "gis") {
-        body = `🌐 **Maritime Boundaries & Restricted Zones (${d.name})**:\n\n• **Distance to IMBL Limit**: **${d.imbl} km**\n• **Local Restricted Sector**: **${d.restricted_zone}** (${d.restricted_dist} km away)`;
+        finalAnswer = `🌐 **Maritime Boundaries & Restricted Zones (${d.name})**:\n\n• **Distance to IMBL Limit**: **${d.imbl} km**\n• **Local Restricted Sector**: **${d.restricted_zone}** (${d.restricted_dist} km away)`;
       } else if (intent === "safety") {
         const verdict = safety_level === "SAFE" ? "Yes, it is SAFE to proceed to sea today." : "CAUTION is advised before venturing into sea.";
-        body = `🛡️ **Multi-Agent Sea Venture Safety Verdict**:\n\n**${verdict}**\n\n• **Safety Rating**: **${safety_level}** (Threat Score: ${final_danger_score}/100)\n• **Wave Height**: ${wave_val}m | **Wind Speed**: ${wind_val} knots (${d.wind_dir})\n• **Weather**: ${d.condition} | **IMBL Distance**: ${d.imbl} km`;
+        finalAnswer = `🛡️ **Multi-Agent Sea Venture Safety Verdict**:\n\n**${verdict}**\n\n• **Safety Rating**: **${safety_level}** (Threat Score: ${final_danger_score}/100)\n• **Wave Height**: ${wave_val}m | **Wind Speed**: ${wind_val} knots (${d.wind_dir})\n• **Weather**: ${d.condition} | **IMBL Distance**: ${d.imbl} km`;
       } else {
-        body = `🛰️ **Marine Overview (${d.name})**:\n\n• **Potential Fishing Zone**: Chlorophyll at **${chloro_val} mg/m³** and SST at **${sst_val}°C**\n• **Primary Species**: ${(d.species_primary || []).join(", ")}\n• **Safety Level**: **${safety_level}** (Threat Score: ${final_danger_score}/100, Waves: ${wave_val}m, Wind: ${wind_val} kts)`;
+        finalAnswer = `🛰️ **Marine Overview (${d.name})**:\n\n• **Potential Fishing Zone**: Chlorophyll at **${chloro_val} mg/m³** and SST at **${sst_val}°C**\n• **Primary Species**: ${(d.species_primary || []).join(", ")}\n• **Safety Level**: **${safety_level}** (Threat Score: ${final_danger_score}/100, Waves: ${wave_val}m, Wind: ${wind_val} kts)`;
       }
-
-      finalAnswer = `${intro}\n\n${body}`;
 
     } else if (detectedLang === "hi") {
-      const time_prefix_hi = time_ctx.hi ? `${time_ctx.hi} के लिए ` : "";
-      const intro = `${time_prefix_hi}${regNameHi} की स्थिति रिपोर्ट:`;
-      let body = "";
+      if (intent === "trip_advisory") {
+        const goVerdictHi = safety_level === "SAFE"
+          ? "✅ **हाँ, कल मछली पकड़ने जाने के लिए मौसम और समुद्र की स्थिति अनुकूल है।**"
+          : safety_level === "CAUTION"
+          ? "⚠️ **सावधानी: कल केवल तट के निकटवर्ती क्षेत्रों में ही जाएं, गहरे समुद्र में जाने से बचें।**"
+          : "🚫 **खतरा: खराब मौसम और अशांत समुद्र के कारण कल समुद्र में बिल्कुल न जाएं।**";
 
-      if (intent === "market") {
+        finalAnswer = `${goVerdictHi}\n\n**${regNameHi}** के लिए कल का विस्तृत समुद्री व मौसम पूर्वानुमान:\n\n` +
+          `1. 🌤️ **मौसम और हवा की स्थिति**:\n` +
+          `  • **हवा की गति**: **${wind_val} नॉट** (~${Math.round(wind_val * 1.852)} किमी/घंटा) दिशा ${d.wind_dir}\n` +
+          `  • **झोंके**: **${d.wind_gusts} नॉट** तक\n` +
+          `  • **मौसम**: ${condHi}, वायुमंडलीय दबाव: **${d.barometer} hPa** (स्थिर)\n` +
+          `  • **दृश्यता**: **${d.visibility_nm} नॉटिकल मील** (स्पष्ट)\n\n` +
+          `2. 🌊 **लहरें और समुद्र की स्थिति**:\n` +
+          `  • **लहरों की ऊंचाई**: **${wave_val} मीटर**\n` +
+          `  • **उफान अवधि**: **${d.swell_period} सेकंड**\n` +
+          `  • **समुद्र स्थिति**: **${d.sea_state_hi || d.sea_state}**\n` +
+          `  • **जल प्रवाह**: **${d.current_spd} नॉट** (${d.current_dir})\n\n` +
+          `3. ⏳ **ज्वार-भाटा और शांत प्रस्थान समय**:\n` +
+          `  • 🔺 **उच्च ज्वार 1**: ${d.tide_ht} | 🔻 **निम्न ज्वार 1**: ${d.tide_lt}\n` +
+          `  • 🔺 **उच्च ज्वार 2**: ${d.tide_ht2} | 🔻 **निम्न ज्वार 2**: ${d.tide_lt2}\n` +
+          `  • 🎯 **बंदरगाह से प्रस्थान का सबसे शांत समय**: **${d.slack_window_hi || d.slack_window}**\n\n` +
+          `4. 🛡️ **प्रस्थान से पहले सुरक्षा जांच**:\n` +
+          `  • सभी हेतु लाइफ जैकेट अनिवार्य\n` +
+          `  • VHF मरीन रेडियो चैनल 16 पर जांचें\n` +
+          `  • तटरक्षक आपातकालीन नंबर याद रखें: **${d.emergency_helpline}**`;
+
+      } else if (intent === "species_profile") {
+        finalAnswer = `🐟 **लक्षित मछली संपूर्ण गाइड: ${spProfile.name_hi || spProfile.name}**\n\n` +
+          `1. 📍 **स्थान और तट से दूरी**:\n` +
+          `  • ${spProfile.location_hi || spProfile.location}\n\n` +
+          `2. 🌊 **पानी की अनुकूल गहराई**:\n` +
+          `  • **${spProfile.depth_hi || spProfile.depth}**\n\n` +
+          `3. 🪱 **चारा (Bait), ल्यूर और अनुशंसित गियर**:\n` +
+          `  • **चारा और ल्यूर**: ${spProfile.bait_hi || spProfile.bait}\n` +
+          `  • **उपयुक्त जाल/गियर**: ${spProfile.gear_hi || spProfile.gear}\n\n` +
+          `4. 🌤️ **अनुकूल मौसम, तापमान और समुद्री स्थिति**:\n` +
+          `  • **समुद्री तापमान (SST)**: **${spProfile.temp_opt}**\n` +
+          `  • **मौसम स्थिति**: ${spProfile.weather_hi || spProfile.weather}\n\n` +
+          `5. 💰 **अनुमानित बाजार भाव और बर्फ संरक्षण**:\n` +
+          `  • **बाजार दर**: **${spProfile.market_price_hi || spProfile.market_price}**\n` +
+          `  • **संरक्षण**: ताजगी बनाए रखने हेतु 1:1 के अनुपात में बर्फ का उपयोग करें।`;
+
+      } else if (intent === "small_boat_safety") {
+        finalAnswer = `⚠️ **सुरक्षा चेतावनी: 25 किमी/घंटा हवा में छोटी नाव का संचालन**\n\n` +
+          `**निर्णय: अत्यधिक सावधानी — छोटी नाव से गहरे समुद्र में जाना सुरक्षित नहीं है।**\n\n` +
+          `1. 💨 **25 किमी/घंटा हवा (~13.5 नॉट) छोटी नावों के लिए खतरनाक क्यों है?**:\n` +
+          `  • 25 किमी/घंटा की हवा से **1.2 से 1.8 मीटर ऊंची तीखी और अशांत लहरें** उठती हैं।\n` +
+          `  • छोटी फाइबर (FRP) नावों की ऊंचाई (फ्रीबोर्ड) कम होती है, जिससे लहरों का पानी नाव के अंदर भरकर उसे डुबो सकता है।\n` +
+          `  • नाव के आउटबोर्ड मोटर (OBM) में पानी जाने या हवा में उठने से प्रोपेलर बंद होने का खतरा रहता है।\n\n` +
+          `2. ⚓ **छोटी नावों के लिए सुरक्षित सीमा**:\n` +
+          `  • **तट से केवल 3 से 5 नॉटिकल मील (5-9 किमी) के सुरक्षित दायरे में ही रहें।**\n` +
+          `  • **10 नॉटिकल मील से अधिक गहरे समुद्र में बिल्कुल न जाएं।**\n\n` +
+          `3. 🛡️ **अनिवार्य सुरक्षा नियम**:\n` +
+          `  • सभी नाविकों के लिए लाइफ जैकेट पहनना अनिवार्य है।\n` +
+          `  • नाव में पानी निकालने हेतु बाल्टी/पंप साथ रखें।\n` +
+          `  • कम से कम दो नावें एक साथ जाएं।\n` +
+          `  • तटरक्षक हेल्पलाइन: **${d.emergency_helpline}**`;
+
+      } else if (intent === "pfz_discrepancy") {
+        finalAnswer = `🔍 **सैटेलाइट PFZ पूर्वानुमान और वास्तविक मछली पकड़ में अंतर क्यों हो सकता है?**\n\n` +
+          `सैटेलाइट केवल संभावित क्षेत्र दर्शाते हैं। वास्तविक अंतर के मुख्य 5 वैज्ञानिक कारण:\n\n` +
+          `1. ⏱️ **डेटा का समय अंतराल (12-24 घंटे)**: सैटेलाइट चित्र लेने के बाद समुद्री धाराएं प्लवक (भोजन) को 5-15 किमी दूर बहा ले जाती हैं।\n` +
+          `2. 🌊 **सतह बनाम गहराई का तापमान**: सैटेलाइट केवल सतह (1 मीटर) मापता है, जबकि टूना व सुरमई 20-60 मीटर की गहराई में तैरती हैं।\n` +
+          `3. 🐟 **खाद्य श्रृंखला में समय**: प्लवक आने के 2-4 दिन बाद छोटी मछलियां और फिर शिकारी मछलियां पहुंचती हैं।\n` +
+          `4. 🚤 **नावों और इंजनों का शोर**: एक स्थान पर अधिक नावें पहुंचने से मछलियां गहराई में भाग जाती हैं।\n` +
+          `5. ☁️ **बादलों का अवरोध**: घने बादलों के कारण सैटेलाइट डेटा का अनुमान लगाया जाता है।\n\n` +
+          `💡 **सुझाव**: PFZ क्षेत्र में पहुंचकर पानी के रंग और **समुद्री पक्षियों के झुंड** को देखकर जाल डालें।`;
+
+      } else if (intent === "pfz_explanation") {
+        finalAnswer = `🧠 **यह संभावित मत्स्य क्षेत्र (PFZ) क्यों अनुशंसित किया गया?**\n\n` +
+          `**${regNameHi}** के पास यह क्षेत्र 5 ठोस वैज्ञानिक मापदंडों के आधार पर चुना गया है:\n\n` +
+          `1. 🛰️ **उच्च क्लोरोफिल-a घनत्व**: यहाँ क्लोरोफिल **${chloro_val} mg/m³** है, जो मछलियों के भोजन का प्रमुख स्रोत है।\n` +
+          `2. 🌡️ **समुद्री तापमान व अपवेलिंग**: तापमान **${sst_val}°C** है, जहाँ ठंडे और गर्म पानी के मिलन से पोषक तत्व ऊपर आते हैं।\n` +
+          `3. 🗺️ **समुद्री तलहटी रचना**: 30-80 मीटर की ढलान पर मछलियों के झुंड प्राकृतिक रूप से एकत्र होते हैं।\n` +
+          `4. 🛡️ **मौसम व सीमा सुरक्षा**: यह क्षेत्र अंतरराष्ट्रीय सीमा से **${d.imbl} किमी** दूर सुरक्षित है और लहरें **${wave_val}m** नियंत्रित हैं।\n` +
+          `5. 👥 **सामुदायिक पुष्टि**: स्थानीय मछुआरों ने इस क्षेत्र में ${(d.species_primary_hi || d.species_primary || []).slice(0, 3).join(", ")} मिलने की पुष्टि की है।`;
+
+      } else if (intent === "market") {
         const pricesList = Object.entries(d.prices || {}).map(([k, v]) => `  • **${k}**: ${v}`).join("\n");
-        body = `💰 **मत्स्य बाजार भाव व आर्थिक जानकारी (${regNameHi})**:\n\n**वर्तमान अनुमानित नीलामी दरें (प्रति किग्रा)**:\n${pricesList}\n\n⛽ **ईंधन बचत सलाह**: ${d.fuel_tip_hi}\n🧊 **बर्फ अनुपात**: ताजे माल हेतु 1:1 का अनुपात रखें।`;
+        finalAnswer = `💰 **मत्स्य बाजार भाव व आर्थिक जानकारी (${regNameHi})**:\n\n**वर्तमान अनुमानित नीलामी दरें (प्रति किग्रा)**:\n${pricesList}\n\n⛽ **ईंधन बचत सलाह**: ${d.fuel_tip_hi}\n🧊 **बर्फ अनुपात**: ताजे माल हेतु 1:1 का अनुपात रखें।`;
       } else if (intent === "emergency") {
-        body = `🚨 **आपातकालीन हेल्पलाइन व समुद्री सुरक्षा प्रोटोकॉल (${regNameHi})**:\n\n• 📞 **भारतीय तटरक्षक बल (ICG हेल्पलाइन)**: **${d.emergency_helpline}**\n• 📻 **आपातकालीन रेडियो फ्रीक्वेंसी**: **${d.mrcc_vhf}**\n• 👮 **मरीन पुलिस**: **1093**\n\n**अनिवार्य सुरक्षा चेकलिस्ट**:\n  ✅ सभी हेतु लाइफ जैकेट\n  ✅ VHF मरीन रेडियो चैनल 16\n  ✅ NavIC / GPS रिसीवर व फ्लेयर्स`;
+        finalAnswer = `🚨 **आपातकालीन हेल्पलाइन व समुद्री सुरक्षा प्रोटोकॉल (${regNameHi})**:\n\n• 📞 **भारतीय तटरक्षक बल (ICG हेल्पलाइन)**: **${d.emergency_helpline}**\n• 📻 **आपातकालीन रेडियो फ्रीक्वेंसी**: **${d.mrcc_vhf}**\n• 👮 **मरीन पुलिस**: **1093**\n\n**अनिवार्य सुरक्षा चेकलिस्ट**:\n  ✅ सभी हेतु लाइफ जैकेट\n  ✅ VHF मरीन रेडियो चैनल 16\n  ✅ NavIC / GPS रिसीवर व फ्लेयर्स`;
       } else if (intent === "wave") {
-        body = `🌊 **सागरी लहरों व जल-प्रवाह की स्थिति (${regNameHi})**:\n\n• **लहरों की ऊंचाई**: **${wave_val} मीटर**\n• **उफान अवधि**: **${d.swell_period} सेकंड** (${d.swell_dir} से)\n• **प्रवाह गति**: **${d.current_spd} समुद्री मील** (${d.current_dir})\n• **समुद्र स्थिति**: **${d.sea_state_hi || d.sea_state}** (तापमान: ${sst_val}°C)`;
+        finalAnswer = `🌊 **सागरी लहरों व जल-प्रवाह की स्थिति (${regNameHi})**:\n\n• **लहरों की ऊंचाई**: **${wave_val} मीटर**\n• **उफान अवधि**: **${d.swell_period} सेकंड** (${d.swell_dir} से)\n• **प्रवाह गति**: **${d.current_spd} समुद्री मील** (${d.current_dir})\n• **समुद्र स्थिति**: **${d.sea_state_hi || d.sea_state}** (तापमान: ${sst_val}°C)`;
       } else if (intent === "weather") {
-        body = `🌤️ **मौसम व वायुमंडलीय स्थिति (${regNameHi})**:\n\n• **हवा की गति**: **${wind_val} समुद्री मील** (${d.wind_dir}) | झोंके: **${d.wind_gusts} नॉट**\n• **वायुदाब**: **${d.barometer} hPa** (स्थिर)\n• **मौसम स्थिति**: ${condHi} (दृश्यता: ${d.visibility_nm} नॉटिकल मील)`;
+        finalAnswer = `🌤️ **मौसम व वायुमंडलीय स्थिति (${regNameHi})**:\n\n• **हवा की गति**: **${wind_val} समुद्री मील** (${d.wind_dir}) | झोंके: **${d.wind_gusts} नॉट**\n• **वायुदाब**: **${d.barometer} hPa** (स्थिर)\n• **मौसम स्थिति**: ${condHi} (दृश्यता: ${d.visibility_nm} नॉटिकल मील)`;
       } else if (intent === "storm") {
         if (has_storm_warning) {
-          body = `⚠️ **तूफान व चक्रवात चेतावनी**: ${regNameHi} में मौसम विभाग द्वारा आंधी की चेतावनी जारी है!\n\n• हवा: **${wind_val} नॉट** (झोंके: **${d.wind_gusts} नॉट**) | लहरें: **${wave_val} मीटर**\n🛡️ **सलाह**: मछुआरे समुद्र में बिल्कुल न जाएं।`;
+          finalAnswer = `⚠️ **तूफान व चक्रवात चेतावनी**: ${regNameHi} में मौसम विभाग द्वारा आंधी की चेतावनी जारी है!\n\n• हवा: **${wind_val} नॉट** (झोंके: **${d.wind_gusts} नॉट**) | लहरें: **${wave_val} मीटर**\n🛡️ **सलाह**: मछुआरे समुद्र में बिल्कुल न जाएं।`;
         } else {
-          body = `✅ **तूफान का कोई अलर्ट नहीं**: वर्तमान में ${regNameHi} में कोई तूफान चेतावनी नहीं है।\n\n• मौसम: ${condHi} | हवा: ${wind_val} नॉट | लहरें: ${wave_val} मीटर`;
+          finalAnswer = `✅ **तूफान का कोई अलर्ट नहीं**: वर्तमान में ${regNameHi} में कोई तूफान चेतावनी नहीं है।\n\n• मौसम: ${condHi} | हवा: ${wind_val} नॉट | लहरें: ${wave_val} मीटर`;
         }
       } else if (intent === "tide") {
-        body = `⏳ **ज्वार-भाटा समय व नौकायन विंडो (${regNameHi})**:\n\n• 🔺 **उच्च ज्वार 1**: ${d.tide_ht} | 🔻 **निम्न ज्वार 1**: ${d.tide_lt}\n• 🔺 **उच्च ज्वार 2**: ${d.tide_ht2} | 🔻 **निम्न ज्वार 2**: ${d.tide_lt2}\n• **शांत जल प्रस्थान विंडो**: ${d.slack_window_hi || d.slack_window}`;
+        finalAnswer = `⏳ **ज्वार-भाटा समय व नौकायन विंडो (${regNameHi})**:\n\n• 🔺 **उच्च ज्वार 1**: ${d.tide_ht} | 🔻 **निम्न ज्वार 1**: ${d.tide_lt}\n• 🔺 **उच्च ज्वार 2**: ${d.tide_ht2} | 🔻 **निम्न ज्वार 2**: ${d.tide_lt2}\n• **शांत जल प्रस्थान विंडो**: ${d.slack_window_hi || d.slack_window}`;
       } else if (intent === "safety") {
         const verdict = safety_level === "SAFE" ? "हाँ, आज समुद्र में जाना सुरक्षित है।" : "आज समुद्र में जाने के लिए सावधानी आवश्यक है।";
-        body = `🛡️ **सुरक्षा निर्णय**: ${verdict}\n\n• **सुरक्षा स्थिति**: **${dangerHi}** (जोखिम: ${final_danger_score}/100)\n• **लहरें**: ${wave_val} मीटर | **हवा**: ${wind_val} नॉट\n• **मौसम**: ${condHi} | **सीमा से दूरी**: ${d.imbl} किमी`;
+        finalAnswer = `🛡️ **सुरक्षा निर्णय**: ${verdict}\n\n• **सुरक्षा स्थिति**: **${dangerHi}** (जोखिम: ${final_danger_score}/100)\n• **लहरें**: ${wave_val} मीटर | **हवा**: ${wind_val} नॉट\n• **मौसम**: ${condHi} | **सीमा से दूरी**: ${d.imbl} किमी`;
       } else {
-        body = `🛰️ **मत्स्य व सागरीय सूचना रिपोर्ट (${regNameHi})**:\n\n• **क्लोरोफिल**: ${chloro_val} मि.ग्रा., तापमान: ${sst_val}°C\n• **प्रमुख मछलियाँ**: ${(d.species_primary_hi || d.species_primary || []).join(", ")}\n• **सुरक्षा स्थिति**: **${dangerHi}** (जोखिम: ${final_danger_score}/100)`;
+        finalAnswer = `🛰️ **मत्स्य व सागरीय सूचना रिपोर्ट (${regNameHi})**:\n\n• **क्लोरोफिल**: ${chloro_val} मि.ग्रा., तापमान: ${sst_val}°C\n• **प्रमुख मछलियाँ**: ${(d.species_primary_hi || d.species_primary || []).join(", ")}\n• **सुरक्षा स्थिति**: **${dangerHi}** (जोखिम: ${final_danger_score}/100)`;
       }
-
-      finalAnswer = `${intro}\n\n${body}`;
 
     } else { // Marathi
-      const time_prefix_mr = time_ctx.mr ? `${time_ctx.mr} च्या माहितीनुसार ` : "";
-      const intro = `${time_prefix_mr}${regNameMr} अहवाल:`;
-      let body = "";
+      if (intent === "trip_advisory") {
+        const goVerdictMr = safety_level === "SAFE"
+          ? "✅ **होय, उद्या मासेमारीसाठी हवामान आणि समुद्राची स्थिती अनुकूल आहे.**"
+          : safety_level === "CAUTION"
+          ? "⚠️ **सावधगिरी: उद्या केवळ किनाऱ्याजवळच्या भागातच मासेमारी करा, खोल समुद्रात जाणे टाळा.**"
+          : "🚫 **धोका: खराब हवामान आणि खवळलेल्या समुद्रामुळे उद्या मासेमारीला जाणे पूर्णपणे टाळा.**";
 
-      if (intent === "market") {
+        finalAnswer = `${goVerdictMr}\n\n**${regNameMr}** साठी उद्याचा सविस्तर सागरी व हवामान अहवाल:\n\n` +
+          `1. 🌤️ **हवामान आणि वाऱ्याची स्थिती**:\n` +
+          `  • **वाऱ्याचा वेग**: **${wind_val} नॉट्स** (~${Math.round(wind_val * 1.852)} किमी/तास) दिशा ${d.wind_dir}\n` +
+          `  • **झोत (Gusts)**: **${d.wind_gusts} नॉट्स** पर्यंत\n` +
+          `  • **हवामान**: ${condMr}, हवेचा दाब: **${d.barometer} hPa** (स्थिर)\n` +
+          `  • **दृश्यमानता**: **${d.visibility_nm} नॉटिकल मैल**\n\n` +
+          `2. 🌊 **लाटा आणि समुद्राची स्थिती**:\n` +
+          `  • **लाटांची उंची**: **${wave_val} मीटर**\n` +
+          `  • **उसळीचा कालावधी**: **${d.swell_period} सेकंद**\n` +
+          `  • **समुद्राची स्थिती**: **${d.sea_state_mr || d.sea_state}**\n` +
+          `  • **प्रवाहाचा वेग**: **${d.current_spd} नॉट्स** (${d.current_dir})\n\n` +
+          `3. ⏳ **भरती-ओहोटी व बोट सोडण्याची शांत वेळ**:\n` +
+          `  • 🔺 **पहिली भरती**: ${d.tide_ht} | 🔻 **पहिली ओहोटी**: ${d.tide_lt}\n` +
+          `  • 🔺 **दुसरी भरती**: ${d.tide_ht2} | 🔻 **दुसरी ओहोटी**: ${d.tide_lt2}\n` +
+          `  • 🎯 **बंदर सोडण्यासाठी सर्वात शांत वेळ**: **${d.slack_window_mr || d.slack_window}**\n\n` +
+          `4. 🛡️ **प्रस्थानापूर्वी सुरक्षा तपासणी सूची**:\n` +
+          `  • सर्व खलाशांसाठी लाईफ जॅकेट अनिवार्य\n` +
+          `  • VHF मरीन रेडिओ चॅनेल १६ वर तपासा\n` +
+          `  • तटरक्षक दल आपत्कालीन संपर्क: **${d.emergency_helpline}**`;
+
+      } else if (intent === "species_profile") {
+        finalAnswer = `🐟 **लक्षित मासा सविस्तर मार्गदर्शक: ${spProfile.name_mr || spProfile.name}**\n\n` +
+          `1. 📍 **स्थान आणि किनाऱ्यापासून अंतर**:\n` +
+          `  • ${spProfile.location_mr || spProfile.location}\n\n` +
+          `2. 🌊 **पाण्याची योग्य खोली**:\n` +
+          `  • **${spProfile.depth_mr || spProfile.depth}**\n\n` +
+          `3. 🪱 **चारा (Bait), आमिष आणि योग्य जाळे**:\n` +
+          `  • **चारा व कृत्रिम आमिष**: ${spProfile.bait_mr || spProfile.bait}\n` +
+          `  • **योग्य जाळे/गियर**: ${spProfile.gear_mr || spProfile.gear}\n\n` +
+          `4. 🌤️ **अनुकूल हवामान, तापमान आणि समुद्राची स्थिती**:\n` +
+          `  • **पाण्याचे तापमान (SST)**: **${spProfile.temp_opt}**\n` +
+          `  • **हवामान स्थिती**: ${spProfile.weather_mr || spProfile.weather}\n\n` +
+          `5. 💰 **अंदाजे बाजारभाव आणि बर्फ साठवण**:\n` +
+          `  • **बाजारभाव**: **${spProfile.market_price_mr || spProfile.market_price}**\n` +
+          `  • **साठवणूक**: माशांची प्रत टिकवण्यासाठी १:१ प्रमाणात बर्फ वापरावा.`;
+
+      } else if (intent === "small_boat_safety") {
+        finalAnswer = `⚠️ **सुरक्षा इशारा: २५ किमी/तास वाऱ्यात लहान बोटींचे संचालन**\n\n` +
+          `**निष्कर्ष: अत्यंत सावधगिरी बाळगा — लहान बोटीने खोल समुद्रात जाणे सुरक्षित नाही.**\n\n` +
+          `1. 💨 **२५ किमी/तास वारा (~१३.५ नॉट्स) लहान बोटींसाठी का धोकादायक आहे?**:\n` +
+          `  • २५ किमी/तास वेगाच्या वाऱ्यामुळे समुद्रात **१.२ ते १.८ मीटर उंच आणि उसळणाऱ्या लाटा** निर्माण होतात.\n` +
+          `  • लहान फायबर (FRP) बोटींची उंची कमी असल्याने लाटांचे पाणी सहज आत शिरून बोट बुडण्याचा धोका संभवतो.\n` +
+          `  • आउटबोर्ड मोटर (OBM) मध्ये पाणी शिरल्यास किंवा इंजिन हवेत उचलल्यास प्रोपेलर बंद पडू शकते.\n\n` +
+          `2. ⚓ **लहान बोटींसाठी सुरक्षित मर्यादा**:\n` +
+          `  • **किनाऱ्यापासून केवळ ३ ते ५ नॉटिकल मैल (५ ते ९ किमी) अंतरावरच राहा.**\n` +
+          `  • **१० नॉटिकल मैलांपेक्षा जास्त खोल समुद्रात अजिबात जाऊ नका.**\n\n` +
+          `3. 🛡️ **अनिवार्य सुरक्षा नियम**:\n` +
+          `  • सर्वांनी लाईफ जॅकेट घालणे बंधनकारक आहे.\n` +
+          `  • पाणी बाहेर काढण्यासाठी बादली किंवा पंप सोबत ठेवा.\n` +
+          `  • नेहमी किमान दोन बोटी एकत्र जा.\n` +
+          `  • तटरक्षक दल हेल्पलाईन: **${d.emergency_helpline}**`;
+
+      } else if (intent === "pfz_discrepancy") {
+        finalAnswer = `🔍 **उपग्रह PFZ अंदाज आणि प्रत्यक्ष मासे मिळण्यात फरक का असू शकतो?**\n\n` +
+          `उपग्रह केवळ संभाव्य मासेमारी क्षेत्र दर्शवतात. प्रत्यक्षातील फरकाची ५ मुख्य शास्त्रीय कारणे:\n\n` +
+          `1. ⏱️ **डेटाचा वेळेतील अंतर (१२-२४ तास)**: उपग्रहाने फोटो घेतल्यानंतर समुद्राच्या प्रवाहामुळे प्लवक ५ ते १५ किमी वाहून जातो.\n` +
+          `2. 🌊 **पृष्ठभाग विरुद्ध खोल पाण्याचे तापमान**: उपग्रह केवळ वरचा थर (१ मीटर) मोजतो, तर टुना आणि सुरमई २० ते ६० मीटर खोल थरात असतात.\n` +
+          `3. 🐟 **अन्न साखळीतील अंतर**: प्लवक तयार झाल्यानंतर लहान मासे आणि त्यानंतर मोठे शिकारी मासे येण्यासाठी २ ते ४ दिवस लागतात.\n` +
+          `4. 🚤 **बोटींचा आवाज आणि मासे विखुरणे**: एकाच ठिकाणी अनेक यांत्रिकी बोटी आल्याने इंजिनच्या आवाजाने मासे खोलवर पळून जातात.\n` +
+          `5. ☁️ **ढगाळ हवामान**: ढगांमुळे उपग्रहाला अचूक फोटो घेता न आल्याने अंदाजित डेटा वापरला जातो.\n\n` +
+          `💡 **मच्छीमारांसाठी सल्ला**: PFZ पट्ट्यात पोहोचल्यावर पाण्याचा रंग आणि **समुद्रावरील पक्ष्यांचे थवे** पाहून जाळे टाकावे.`;
+
+      } else if (intent === "pfz_explanation") {
+        finalAnswer = `🧠 **हे संभाव्य मासेमारी क्षेत्र (PFZ) का निवडले गेले?**\n\n` +
+          `**${regNameMr}** नजीकचे हे क्षेत्र खालील ५ वैज्ञानिक कारणांमुळे निवडले गेले आहे:\n\n` +
+          `1. 🛰️ **उच्च क्लोरोफिल-a घनता**: येथे क्लोरोफिल **${chloro_val} mg/m³** आहे, जे माशांचे मुख्य खाद्य (प्लवक) दर्शवते.\n` +
+          `2. 🌡️ **समुद्राचे तापमान व थर्मल फ्रंट**: तापमान **${sst_val}°C** असून, पोषक द्रव्यांचे प्रवाह पृष्ठभागावर येत आहेत.\n` +
+          `3. 🗺️ **समुद्राच्या तळाची रचना**: ३०-८० मीटरच्या शेल्फ उतारावर माशांचे थवे नैसर्गिकरित्या जमा होतात.\n` +
+          `4. 🛡️ **हवामान आणि सुरक्षित सीमा**: हे क्षेत्र आंतरराष्ट्रीय सीमेपासून **${d.imbl} किमी** सुरक्षित असून लाटा **${wave_val}m** नियंत्रित आहेत.\n` +
+          `5. 👥 **मच्छीमार नोंदी**: स्थानिक मच्छीमारांनी या भागात ${(d.species_primary_mr || d.species_primary || []).slice(0, 3).join(", ")} मुबलक मिळण्याची नोंद केली आहे.`;
+
+      } else if (intent === "market") {
         const pricesList = Object.entries(d.prices || {}).map(([k, v]) => `  • **${k}**: ${v}`).join("\n");
-        body = `💰 **मत्स्य बाजारभाव व आर्थिक मार्गदर्शन ({regNameMr})**:\n\n**आजचे अंदाजे लिलाव बाजारभाव (प्रति किलो)**:\n${pricesList}\n\n⛽ **डिझेल बचत सल्ला**: ${d.fuel_tip_mr}\n🧊 **बर्फ वापर**: १:१ प्रमाणात बर्फ वापरावा.`;
+        finalAnswer = `💰 **मत्स्य बाजारभाव व आर्थिक मार्गदर्शन (${regNameMr})**:\n\n**आजचे अंदाजे लिलाव बाजारभाव (प्रति किलो)**:\n${pricesList}\n\n⛽ **डिझेल बचत सल्ला**: ${d.fuel_tip_mr}\n🧊 **बर्फ वापर**: १:१ प्रमाणात बर्फ वापरावा.`;
       } else if (intent === "emergency") {
-        body = `🚨 **आपत्कालीन मदत क्रमांक व सागरी सुरक्षा नियम (${regNameMr})**:\n\n• 📞 **तटरक्षक दल (ICG हेल्पलाईन)**: **${d.emergency_helpline}**\n• 📻 **आंतरराष्ट्रीय आणीबाणी फ्रिक्वेन्सी**: **${d.mrcc_vhf}**\n• 👮 **सागरी पोलीस**: **1093**\n\n**अनिवार्य सुरक्षा तपासणी सूची**:\n  ✅ सर्व खलाशांसाठी लाईफ जॅकेट\n  ✅ VHF मरीन रेडिओ चॅनेल १६\n  ✅ NavIC / GPS यंत्र व लाल फ्लेअर्स`;
+        finalAnswer = `🚨 **आपत्कालीन मदत क्रमांक व सागरी सुरक्षा नियम (${regNameMr})**:\n\n• 📞 **तटरक्षक दल (ICG हेल्पलाईन)**: **${d.emergency_helpline}**\n• 📻 **आंतरराष्ट्रीय आणीबाणी फ्रिक्वेन्सी**: **${d.mrcc_vhf}**\n• 👮 **सागरी पोलीस**: **1093**\n\n**अनिवार्य सुरक्षा तपासणी सूची**:\n  ✅ सर्व खलाशांसाठी लाईफ जॅकेट\n  ✅ VHF मरीन रेडिओ चॅनेल १६\n  ✅ NavIC / GPS यंत्र व लाल फ्लेअर्स`;
       } else if (intent === "wave") {
-        body = `🌊 **सागरी लाटा व प्रवाहाचे स्वरूप (${regNameMr})**:\n\n• **लाटांची उंची**: **${wave_val} मीटर**\n• **उसळीचा कालावधी**: **${d.swell_period} सेकंद** (${d.swell_dir} कडून)\n• **प्रवाहाचा वेग**: **${d.current_spd} नॉट्स** (${d.current_dir})\n• **समुद्राची स्थिती**: **${d.sea_state_mr || d.sea_state}** (तापमान: ${sst_val}°C)`;
+        finalAnswer = `🌊 **सागरी लाटा व प्रवाहाचे स्वरूप (${regNameMr})**:\n\n• **लाटांची उंची**: **${wave_val} मीटर**\n• **उसळीचा कालावधी**: **${d.swell_period} सेकंद** (${d.swell_dir} कडून)\n• **प्रवाहाचा वेग**: **${d.current_spd} नॉट्स** (${d.current_dir})\n• **समुद्राची स्थिती**: **${d.sea_state_mr || d.sea_state}** (तापमान: ${sst_val}°C)`;
       } else if (intent === "weather") {
-        body = `🌤️ **हवामान व वातावरणीय नोंदी (${regNameMr})**:\n\n• **वाऱ्याचा वेग**: **${wind_val} नॉट्स** (${d.wind_dir}) | झोत: **${d.wind_gusts} नॉट्स**\n• **हवेचा दाब**: **${d.barometer} hPa** (स्थिर)\n• **हवामान स्थिती**: ${condMr} (दृश्यमानता: ${d.visibility_nm} मैल)`;
+        finalAnswer = `🌤️ **हवामान व वातावरणीय नोंदी (${regNameMr})**:\n\n• **वाऱ्याचा वेग**: **${wind_val} नॉट्स** (${d.wind_dir}) | झोत: **${d.wind_gusts} नॉट्स**\n• **हवेचा दाब**: **${d.barometer} hPa** (स्थिर)\n• **हवामान स्थिती**: ${condMr} (दृश्यमानता: ${d.visibility_nm} मैल)`;
       } else if (intent === "storm") {
         if (has_storm_warning) {
-          body = `⚠️ **वादळ व चक्रीवादळ इशारा**: ${regNameMr} भागात वादळी हवामानाचा इशारा जारी आहे!\n\n• वाऱ्याचा वेग: **${wind_val} नॉट्स** (झोत: **${d.wind_gusts} नॉट्स**) | लाटा: **${wave_val} मीटर**\n🛡️ **सूचना**: मच्छीमारांनी समुद्रात जाणे पूर्णपणे टाळावे.`;
+          finalAnswer = `⚠️ **वादळ व चक्रीवादळ इशारा**: ${regNameMr} भागात वादळी हवामानाचा इशारा जारी आहे!\n\n• वाऱ्याचा वेग: **${wind_val} नॉट्स** (झोत: **${d.wind_gusts} नॉट्स**) | लाटा: **${wave_val} मीटर**\n🛡️ **सूचना**: मच्छीमारांनी समुद्रात जाणे पूर्णपणे टाळावे.`;
         } else {
-          body = `✅ **वादळाचा कोणताही इशारा नाही**: सध्या ${regNameMr} परिसरात वादळाचा कोणताही इशारा नाही.\n\n• हवामान: ${condMr} | वारे: ${wind_val} नॉट्स | लाटा: ${wave_val} मीटर`;
+          finalAnswer = `✅ **वादळाचा कोणताही इशारा नाही**: सध्या ${regNameMr} परिसरात वादळाचा कोणताही इशारा नाही.\n\n• हवामान: ${condMr} | वारे: ${wind_val} नॉट्स | लाटा: ${wave_val} मीटर`;
         }
       } else if (intent === "tide") {
-        body = `⏳ **भरती-ओहोटी वेळापत्रक व शांत पाण्याची वेळ (${regNameMr})**:\n\n• 🔺 **पहिली भरती**: ${d.tide_ht} | 🔻 **पहिली ओहोटी**: ${d.tide_lt}\n• 🔺 **दुसरी भरती**: ${d.tide_ht2} | 🔻 **दुसरी ओहोटी**: ${d.tide_lt2}\n• **शांत पाण्याचा कालावधी**: ${d.slack_window_mr || d.slack_window}`;
+        finalAnswer = `⏳ **भरती-ओहोटी वेळापत्रक व शांत पाण्याची वेळ (${regNameMr})**:\n\n• 🔺 **पहिली भरती**: ${d.tide_ht} | 🔻 **पहिली ओहोटी**: ${d.tide_lt}\n• 🔺 **दुसरी भरती**: ${d.tide_ht2} | 🔻 **दुसरी ओहोटी**: ${d.tide_lt2}\n• **शांत पाण्याचा कालावधी**: ${d.slack_window_mr || d.slack_window}`;
       } else if (intent === "safety") {
         const verdict = safety_level === "SAFE" ? "होय, आज समुद्रात जाणे पूर्णपणे सुरक्षित आहे." : "आज समुद्रात जाताना सावधगिरी बाळगावी.";
-        body = `🛡️ **सुरक्षा निष्कर्ष**: ${verdict}\n\n• **सुरक्षा पातळी**: **${dangerMr}** (जोखिम: ${final_danger_score}/100)\n• **लाटांची उंची**: ${wave_val} मीटर | **वाऱ्याचा वेग**: ${wind_val} नॉट्स\n• **हवामान**: ${condMr} | **सीमेपासून अंतर**: ${d.imbl} किमी`;
+        finalAnswer = `🛡️ **सुरक्षा निष्कर्ष**: ${verdict}\n\n• **सुरक्षा पातळी**: **${dangerMr}** (जोखिम: ${final_danger_score}/100)\n• **लाटांची उंची**: ${wave_val} मीटर | **वाऱ्याचा वेग**: ${wind_val} नॉट्स\n• **हवामान**: ${condMr} | **सीमेपासून अंतर**: ${d.imbl} किमी`;
       } else {
-        body = `🛰️ **मासेमारी व सागरी माहिती अहवाल (${regNameMr})**:\n\n• **क्लोरोफिल**: ${chloro_val} mg/m³, तापमान: ${sst_val}°C\n• **स्थानिक मासे**: ${(d.species_primary_mr || d.species_primary || []).join(", ")}\n• **सुरक्षा पातळी**: **${dangerMr}** (जोखिम: ${final_danger_score}/100)`;
+        finalAnswer = `🛰️ **मासेमारी व सागरी माहिती अहवाल (${regNameMr})**:\n\n• **क्लोरोफिल**: ${chloro_val} mg/m³, तापमान: ${sst_val}°C\n• **स्थानिक मासे**: ${(d.species_primary_mr || d.species_primary || []).join(", ")}\n• **सुरक्षा पातळी**: **${dangerMr}** (जोखिम: ${final_danger_score}/100)`;
       }
-
-      finalAnswer = `${intro}\n\n${body}`;
     }
 
     return {
@@ -798,27 +1055,39 @@ export default function CopilotPage() {
             </div>
           </div>
 
-          {/* Quick Prompts Panel covering diverse domains */}
+          {/* Quick Prompts Panel covering user operational questions */}
           <div className="p-3 bg-stone-50 border-b border-stone-150 flex flex-wrap gap-1.5 text-xs">
             {language === "hi" ? (
               <>
                 <button 
-                  onClick={() => handleSendMessage("सुरमई और पापलेट मछली पकड़ने की गहराई और चारा क्या है?")}
+                  onClick={() => handleSendMessage("आज के मौसम, हवा, लहरों की ऊंचाई और समुद्र की स्थिति के आधार पर, क्या मुझे कल मछली पकड़ने जाना चाहिए?")}
                   className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
                 >
-                  🐟 सुरमई व पापलेट
+                  🌤️ कल मासेमारी सलाह
                 </button>
                 <button 
-                  onClick={() => handleSendMessage("मुंबई बंदरगाह में मछलियों के आज के बाजार भाव क्या हैं?")}
+                  onClick={() => handleSendMessage("मैं टूना मछली पकड़ना चाहता हूँ। मुझे किस स्थान, गहराई, चारा और मौसम की स्थिति को देखना चाहिए?")}
                   className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
                 >
-                  💰 बाजार भाव व ईंधन
+                  🐟 टूना मछली गाइड
                 </button>
                 <button 
-                  onClick={() => handleSendMessage("समुद्र में लहरों की ऊंचाई और जल प्रवाह कैसा है?")}
+                  onClick={() => handleSendMessage("मेरे पास एक छोटी मछली पकड़ने वाली नाव है और हवा की गति 25 किमी/घंटा है। क्या गहरे समुद्र में जाना सुरक्षित है?")}
                   className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
                 >
-                  🌊 लहरें व प्रवाह
+                  ⛵ छोटी नाव व 25 किमी हवा
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("पूर्वानुमानित मछली पकड़ने का क्षेत्र (PFZ) उस जगह से अलग क्यों हो सकता है जहाँ मछुआरे वास्तव में मछलियाँ पकड़ रहे हैं?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  🔍 PFZ और शिकार में अंतर?
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("क्या आप समझा सकते हैं कि आपने इस मछली पकड़ने के क्षेत्र की सिफारिश क्यों की?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  🧠 यह क्षेत्र क्यों चुना?
                 </button>
                 <button 
                   onClick={() => handleSendMessage("आपातकाल में भारतीय तटरक्षक (Coast Guard) का SOS नंबर क्या है?")}
@@ -826,38 +1095,38 @@ export default function CopilotPage() {
                 >
                   🚨 तटरक्षक हेल्पलाइन
                 </button>
-                <button 
-                  onClick={() => handleSendMessage("कोच्चि में उच्च ज्वार और नौकायन का शांत समय क्या है?")}
-                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
-                >
-                  ⏳ ज्वार-भाटा समय
-                </button>
-                <button 
-                  onClick={() => handleSendMessage("गोवा में क्या आज समुद्र में जाना सुरक्षित है?")}
-                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
-                >
-                  🛡️ सुरक्षा निर्णय
-                </button>
               </>
             ) : language === "mr" ? (
               <>
                 <button 
-                  onClick={() => handleSendMessage("पापलेट आणि सुरमई मासे पकडण्यासाठी योग्य जाळे आणि खोली कोणती?")}
+                  onClick={() => handleSendMessage("आजचे हवामान, वारा, लाटांची उंची आणि समुद्राची स्थिती लक्षात घेता, मी उद्या मासेमारीला जावे का?")}
                   className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
                 >
-                  🐟 पापलेट व सुरमई
+                  🌤️ उद्याची मासेमारी सल्ला
                 </button>
                 <button 
-                  onClick={() => handleSendMessage("मुंबई गोदीत आज माशांचे लिलाव बाजारभाव काय आहेत?")}
+                  onClick={() => handleSendMessage("मला टुना मासा पकडायचा आहे. त्यासाठी कोणते स्थान, पाण्याची खोली, आमिष/चारा आणि हवामान योग्य ठरेल?")}
                   className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
                 >
-                  💰 बाजारभाव व डिझेल
+                  🐟 टुना मासा मार्गदर्शक
                 </button>
                 <button 
-                  onClick={() => handleSendMessage("समुद्रात लाटांची उंची आणि प्रवाहाचा वेग किती आहे?")}
+                  onClick={() => handleSendMessage("माझ्याकडे एक लहान मासेमारी बोट आहे आणि वाऱ्याचा वेग २५ किमी/तास आहे. खोल समुद्रात जाणे सुरक्षित आहे का?")}
                   className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
                 >
-                  🌊 लाटा व प्रवाह
+                  ⛵ लहान बोट व २५ किमी वारा
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("उपग्रहाने दर्शवलेले संभाव्य मासेमारी क्षेत्र (PFZ) आणि मच्छीमारांना प्रत्यक्षात मासे मिळण्याचे ठिकाण यात फरक का असू शकतो?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  🔍 PFZ व प्रत्यक्ष मासेमारीत फरक?
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("तुम्ही हेच मासेमारी क्षेत्र का सुचवले याचे कारण सांगू शकता का?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  🧠 हे क्षेत्र का निवडले?
                 </button>
                 <button 
                   onClick={() => handleSendMessage("आपत्कालीन मदतीसाठी तटरक्षक दल (Coast Guard) नंबर काय आहे?")}
@@ -865,56 +1134,44 @@ export default function CopilotPage() {
                 >
                   🚨 आपत्कालीन हेल्पलाईन
                 </button>
-                <button 
-                  onClick={() => handleSendMessage("भरती-ओहोटीचे वेळापत्रक आणि बोट सोडण्यासाठी शांत वेळ कोणती?")}
-                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
-                >
-                  ⏳ भरती-ओहोटी वेळ
-                </button>
-                <button 
-                  onClick={() => handleSendMessage("गोव्यात आज समुद्रात जाणे सुरक्षित आहे का?")}
-                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
-                >
-                  🛡️ सुरक्षा निष्कर्ष
-                </button>
               </>
             ) : (
               <>
                 <button 
-                  onClick={() => handleSendMessage("What depth, bait, and gear is best for Surmai and Pomfret in Mumbai?")}
+                  onClick={() => handleSendMessage("Based on today's weather, wind, wave height and sea conditions, should I go fishing tomorrow?")}
                   className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
                 >
-                  🐟 Surmai & Pomfret
+                  🌤️ Tomorrow Trip Advisory
                 </button>
                 <button 
-                  onClick={() => handleSendMessage("What are current dockside fish market auction prices and fuel savings?")}
+                  onClick={() => handleSendMessage("I'm targeting tuna. What location, depth, bait and weather conditions should I look for?")}
                   className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
                 >
-                  💰 Market Prices & Fuel
+                  🐟 Tuna Guide
                 </button>
                 <button 
-                  onClick={() => handleSendMessage("What is the wave swell period, height, and surface current in Goa?")}
+                  onClick={() => handleSendMessage("I have a small fishing boat and the wind speed is 25 km/h. Is it safe to go offshore?")}
                   className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
                 >
-                  🌊 Waves & Swells
+                  ⛵ Small Boat & 25 km/h Wind
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("Why might the predicted fishing zone be different from where fishermen are actually catching fish?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  🔍 Why PFZ differs from catch?
+                </button>
+                <button 
+                  onClick={() => handleSendMessage("Can you explain why you recommended this fishing zone?")}
+                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
+                >
+                  🧠 Why recommended this zone?
                 </button>
                 <button 
                   onClick={() => handleSendMessage("What is the Indian Coast Guard emergency distress helpline and VHF frequency?")}
                   className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
                 >
                   🚨 Coast Guard SOS
-                </button>
-                <button 
-                  onClick={() => handleSendMessage("What is the full high tide schedule and harbor slack window in Kochi?")}
-                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
-                >
-                  ⏳ Tide & Slack Window
-                </button>
-                <button 
-                  onClick={() => handleSendMessage("What is the sea venture safety threat score and weather for Veraval?")}
-                  className="bg-white hover:bg-stone-100 border border-stone-200 text-blue-900 px-2.5 py-1 rounded-md transition duration-150 text-[11px] font-semibold cursor-pointer"
-                >
-                  🛡️ Safety Verdict
                 </button>
               </>
             )}
