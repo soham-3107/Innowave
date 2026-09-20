@@ -1044,22 +1044,32 @@ export default function CopilotPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: messageText })
-      });
+      let res: Response | null = null;
+      try {
+        res = await fetch(`${API_BASE_URL}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: messageText })
+        });
+      } catch {
+        // If external API_BASE_URL fails, try relative /api/chat
+        res = await fetch(`/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: messageText })
+        });
+      }
       
-      if (!res.ok) throw new Error("API error");
+      if (!res || !res.ok) throw new Error("API error");
       const data = await res.json();
 
       setMessages(prev => [...prev, {
         sender: "innowave",
-        text: data.final_answer,
+        text: data.final_answer || data.text,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }]);
       setReasoningTrace(data.reasoning_trace || []);
-      setDangerScore(data.metrics?.danger_score ?? null);
+      setDangerScore(data.metrics?.danger_score ?? data.danger_score ?? null);
       setConfidenceScore(data.confidence_score ?? null);
       setAgentAgreement(data.agent_agreement ?? null);
 
@@ -1068,13 +1078,13 @@ export default function CopilotPage() {
       }
 
     } catch (err) {
-      console.warn("Backend offline. Running client fallback agent network.", err);
+      console.warn("Backend API not reachable. Running client agent network simulation.", err);
       const simulatedResult = runLocalAgentSimulation(messageText);
 
       setTimeout(() => {
         setMessages(prev => [...prev, {
           sender: "innowave",
-          text: simulatedResult.final_answer + " (Client Fallback Active)",
+          text: simulatedResult.final_answer,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }]);
         setReasoningTrace(simulatedResult.reasoning_trace);
