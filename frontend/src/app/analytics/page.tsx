@@ -393,7 +393,7 @@ export default function AnalyticsPage() {
             </p>
           </div>
           <div className="h-[320px] w-full relative">
-            <Line data={bioChartData} options={bioOptions} />
+            <Line data={bioChartData as any} options={bioOptions} />
           </div>
         </div>
 
