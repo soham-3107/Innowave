@@ -433,6 +433,19 @@ export default function CopilotPage() {
     else if (isEvening) time_ctx = { key: "evening", en: "evening", hi: "शाम", mr: "संध्याकाळी" };
 
     // 4. Granular Intent Detection (Priority Order)
+    const isDangerExplanation = [
+      "why the danger index", "why is the danger index", "explain why the danger", "explain the danger index",
+      "why danger index is", "why the danger score", "explain the danger score", "why danger is", "danger index right now",
+      "धोका निर्देशांक का", "धोक्याचा निर्देशांक का", "धोका का आहे", "धोका निर्देशांक समजावून", "खतरा इंडेक्स क्यों", "डेंजर स्कोर क्यों", "खतरा क्यों है"
+    ].some(w => textLower.includes(w)) || ((textLower.includes("danger") || textLower.includes("threat") || textLower.includes("धोका") || textLower.includes("खतरा")) && (textLower.includes("why") || textLower.includes("explain") || textLower.includes("का") || textLower.includes("क्यों") || textLower.includes("समझाएं") || textLower.includes("सांगा")));
+
+    const isSpeciesExpected = [
+      "what species should i expect", "species should i expect", "what species to expect", "what fish to expect",
+      "species can i expect", "what fish should i expect", "what species can i catch", "what fish can i catch", "what species are near",
+      "कोणते मासे मिळतील", "कोणत्या माशांची अपेक्षा आहे", "कोणते मासे मिळण्याची अपेक्षा",
+      "कौन सी मछली मिलने की उम्मीद", "कौन सी मछली मिलेगी", "कौन सी प्रजाति मिलेगी"
+    ].some(w => textLower.includes(w)) || ((textLower.includes("expect") || textLower.includes("मिळेल") || textLower.includes("मिळतील") || textLower.includes("उम्मीद") || textLower.includes("अपेक्षा")) && (textLower.includes("species") || textLower.includes("fish") || textLower.includes("मासे") || textLower.includes("मछली") || textLower.includes("प्रजाति")));
+
     const isSmallBoat = ["small boat", "small fishing boat", "25 km/h", "25 kmph", "25 किमी", "छोटी नाव", "लहान बोट", "हवा 25", "vara 25", "25 km"].some(w => textLower.includes(w)) ||
       (textLower.includes("small") && (textLower.includes("boat") || textLower.includes("wind") || textLower.includes("offshore")));
     
@@ -466,7 +479,9 @@ export default function CopilotPage() {
     const isSafe = ["safe", "safety", "danger", "warning", "सुरक्षित", "धोका", "खतरा", "इशारा", "चेतावनी"].some(w => textLower.includes(w));
 
     let intent = "general";
-    if (isSmallBoat) intent = "small_boat_safety";
+    if (isDangerExplanation) intent = "danger_index_explanation";
+    else if (isSpeciesExpected) intent = "species_expected";
+    else if (isSmallBoat) intent = "small_boat_safety";
     else if (isPfzDiscrepancy) intent = "pfz_discrepancy";
     else if (isPfzExplanation) intent = "pfz_explanation";
     else if (isTripAdvisory) intent = "trip_advisory";
@@ -695,9 +710,38 @@ export default function CopilotPage() {
         finalAnswer = `🎣 **Recommended Gear & Net Configuration for ${d.name}**:\n\n• **Primary Gear**: Pelagic Drift Nets & Gillnets\n• **Mesh Size**: 35-45mm for shoaling pelagics, 120-140mm for large pomfret/surmai\n• **Target Species**: ${(d.species_primary || []).join(", ")}`;
       } else if (intent === "gis") {
         finalAnswer = `🌐 **Maritime Boundaries & Restricted Zones (${d.name})**:\n\n• **Distance to IMBL Limit**: **${d.imbl} km**\n• **Local Restricted Sector**: **${d.restricted_zone}** (${d.restricted_dist} km away)`;
+      } else if (intent === "danger_index_explanation") {
+        finalAnswer = `🧠 **COMPOSITE DANGER INDEX EXPLANATION: ${final_danger_score}/100 (${safety_level} RISK)**\n\n` +
+          `The current marine danger index for **${d.name}** is computed at **${final_danger_score}/100** by combining real-time atmospheric, hydrodynamic, geospatial, and community threat scores:\n\n` +
+          `1. 💨 **Wind Threat Component (${wind_risk.toFixed(1)} / 35 pts)**: Based on sustained winds of **${wind_val} knots** (~${Math.round(wind_val * 1.852)} km/h) and gusts up to **${d.wind_gusts} knots**.\n` +
+          `2. 🌊 **Wave & Swell Component (${wave_risk.toFixed(1)} / 35 pts)**: Derived from a significant wave height of **${wave_val} meters** and an **${d.swell_period}-second swell period** (${d.sea_state}).\n` +
+          `3. 🌐 **Geospatial & Boundary Risk (${Math.min(30.0, gis_risk).toFixed(1)} / 30 pts)**: Operating **${d.imbl} km from the IMBL** and clear of the ${d.restricted_zone} boundary.\n` +
+          `4. 👥 **Community Report Modifier (${community_risk_mod >= 0 ? "+" : ""}${community_risk_mod} pts)**: Adjusted based on ${activeReports.length} verified harbor logs and active weather warnings.\n\n` +
+          `**Summary**: At ${final_danger_score}/100, the overall operational risk remains **${safety_level}**, allowing standard commercial fishing crafts to operate with normal maritime vigilance.`;
+
+      } else if (intent === "species_expected") {
+        const expSpeciesList = (d.species_primary || ["Indian Mackerel", "Silver Pomfret", "Surmai", "Yellowfin Tuna"]).join(", ");
+        finalAnswer = `🐟 **EXPECTED FISH SPECIES NEAR ${d.name.toUpperCase()} (${time_ctx.en || "THIS WEEK"})**\n\n` +
+          `Along the **${d.name}** coastline and mid-shelf waters this week, fishermen should primarily expect healthy biomass of **${expSpeciesList}**.\n\n` +
+          `• **Bathymetric Depth & Habitat**: Target depths range between **20 - 55 meters** along the continental shelf contours where upwelling concentrates forage shoals.\n` +
+          `• **Oceanic Indicators**: Satellite remote sensing records rich chlorophyll-a concentrations at **${chloro_val} mg/m³** and sea surface temperatures at **${sst_val}°C**, creating an active thermal convergence front located 18-35 km offshore.\n` +
+          `• **Recommended Tackle & Gear**: Deploy **trolling lines with wire trace and pelagic driftnets** during early morning tidal influxes.\n` +
+          `• **Commercial Value**: Dockside auction rates are averaging **₹600 - ₹850/kg for Surmai, ₹240 - ₹380/kg for Tuna, ₹140 - ₹220/kg for Mackerel** with strong local market demand.`;
+
       } else if (intent === "safety") {
-        const verdict = safety_level === "SAFE" ? "Yes, it is SAFE to proceed to sea today." : "CAUTION is advised before venturing into sea.";
-        finalAnswer = `🛡️ **Multi-Agent Sea Venture Safety Verdict**:\n\n**${verdict}**\n\n• **Safety Rating**: **${safety_level}** (Threat Score: ${final_danger_score}/100)\n• **Wave Height**: ${wave_val}m | **Wind Speed**: ${wind_val} knots (${d.wind_dir})\n• **Weather**: ${d.condition} | **IMBL Distance**: ${d.imbl} km`;
+        const verdictBanner = safety_level === "SAFE"
+          ? `✅ **YES, IT IS SAFE TO GO FISHING NEAR ${d.name.toUpperCase()} TODAY.**`
+          : safety_level === "CAUTION"
+          ? `⚠️ **CAUTION IS ADVISED BEFORE GOING FISHING NEAR ${d.name.toUpperCase()} TODAY.**`
+          : `🚫 **NO, IT IS NOT SAFE TO GO FISHING NEAR ${d.name.toUpperCase()} TODAY.**`;
+        const verdictReason = safety_level === "SAFE"
+          ? `Atmospheric and hydrodynamic telemetry indicate favorable sea conditions across ${d.name}. Sustained winds are moderate at **${wind_val} knots** (~${Math.round(wind_val * 1.852)} km/h) from ${d.wind_dir} with peak gusts under ${d.wind_gusts} knots, and significant wave swells are stable at **${wave_val} meters** (${d.sea_state}).`
+          : safety_level === "CAUTION"
+          ? `While nearshore waters within 3-5 nautical miles are manageable, choppy wave swells of **${wave_val} meters** and gusty winds reaching **${d.wind_gusts} knots** create moderate risk for smaller crafts.`
+          : `Severe marine hazards are active with heavy wave swells of **${wave_val} meters** and squall wind gusts exceeding **${d.wind_gusts} knots**, making sea ventures highly dangerous.`;
+
+        finalAnswer = `${verdictBanner}\n\n${verdictReason} The composite danger score is currently **${final_danger_score}/100 (${safety_level})**, with barometric pressure holding steady at **${d.barometer} hPa** under ${d.condition}.\n\n` +
+          `Vessels are located **${d.imbl} km safely clear of the International Maritime Boundary Line (IMBL)**. Motorized crafts are cleared for standard daytime voyages, but all crews must wear ISI-approved lifejackets and keep VHF Marine Radio tuned to **${d.mrcc_vhf}** for real-time Coast Guard updates.`;
       } else {
         finalAnswer = `🛰️ **Marine Overview (${d.name})**:\n\n• **Potential Fishing Zone**: Chlorophyll at **${chloro_val} mg/m³** and SST at **${sst_val}°C**\n• **Primary Species**: ${(d.species_primary || []).join(", ")}\n• **Safety Level**: **${safety_level}** (Threat Score: ${final_danger_score}/100, Waves: ${wave_val}m, Wind: ${wind_val} kts)`;
       }
@@ -798,9 +842,38 @@ export default function CopilotPage() {
         }
       } else if (intent === "tide") {
         finalAnswer = `⏳ **ज्वार-भाटा समय व नौकायन विंडो (${regNameHi})**:\n\n• 🔺 **उच्च ज्वार 1**: ${d.tide_ht} | 🔻 **निम्न ज्वार 1**: ${d.tide_lt}\n• 🔺 **उच्च ज्वार 2**: ${d.tide_ht2} | 🔻 **निम्न ज्वार 2**: ${d.tide_lt2}\n• **शांत जल प्रस्थान विंडो**: ${d.slack_window_hi || d.slack_window}`;
+      } else if (intent === "danger_index_explanation") {
+        finalAnswer = `🧠 **खतरा इंडेक्स (DANGER INDEX) का संपूर्ण वैज्ञानिक विश्लेषण: ${final_danger_score}/100 (${dangerHi})**\n\n` +
+          `वर्तमान में **${regNameHi}** हेतु खतरा इंडेक्स **${final_danger_score}/100** आंका गया है। इसके 4 प्रमुख वैज्ञानिक घटक निम्न हैं:\n\n` +
+          `१. 💨 **हवा का खतरा (${wind_risk.toFixed(1)} / 35 अंक)**: हवा की गति **${wind_val} नॉट** (~${Math.round(wind_val * 1.852)} किमी/घंटा) और झोंके **${d.wind_gusts} नॉट** के आधार पर।\n` +
+          `२. 🌊 **लहरों का खतरा (${wave_risk.toFixed(1)} / 35 अंक)**: लहरों की ऊंचाई **${wave_val} मीटर** और **${d.swell_period} सेकंड** की उफान अवधि पर आधारित।\n` +
+          `३. 🌐 **सीमा व प्रतिबंधित क्षेत्र (${Math.min(30.0, gis_risk).toFixed(1)} / 30 अंक)**: IMBL सीमा से **${d.imbl} किमी** दूर पूर्णतः सुरक्षित।\n` +
+          `४. 👥 **सामुदायिक व मौसम अलर्ट (${community_risk_mod >= 0 ? "+" : ""}${community_risk_mod} अंक)**: स्थानीय बंदरगाह से प्राप्त सत्यापित रिपोर्टों के अनुसार।\n\n` +
+          `**निष्कर्ष**: ${final_danger_score}/100 का स्कोर दर्शाता है कि वर्तमान में स्थिति **${dangerHi}** श्रेणी में है।`;
+
+      } else if (intent === "species_expected") {
+        const expSpeciesList = (d.species_primary_hi || d.species_primary || ["बांगड़ा", "सिल्वर पापलेट", "सुरमई", "टूना"]).join(", ");
+        finalAnswer = `🐟 **${regNameHi} के पास मिलने वाली अपेक्षित मछलियाँ (${time_ctx.hi || "इस सप्ताह"})**\n\n` +
+          `इस सप्ताह **${regNameHi}** के तटीय व मध्य-शेल्फ क्षेत्रों में मुख्य रूप से **${expSpeciesList}** का अच्छा भंडार मिलने की प्रबल संभावना है।\n\n` +
+          `• **अनुकूल गहराई व क्षेत्र**: महाद्वीपीय शेल्फ पर **20 - 55 मीटर** की गहराई में मछलियों के झुंड सक्रिय हैं।\n` +
+          `• **सागरीय स्थिति**: उपग्रह से प्राप्त क्लोरोफिल स्तर **${chloro_val} मि.ग्रा./घन मीटर** और समुद्री तापमान **${sst_val}°C** है, जो तट से 20-35 किमी दूर उत्तम थर्मल फ्रंट बनाता है।\n` +
+          `• **अनुशंसित गियर**: सुबह की चढ़ती ज्वार के समय **ट्रोलिंग लाइन्स व पेलाजिक ड्रिफ्ट जाल** का प्रयोग करें।\n` +
+          `• **बाजार भाव**: वर्तमान मंडी दरें **सुरमई: ₹600-850/किग्रा, टूना: ₹240-380/किग्रा, बांगड़ा: ₹140-220/किग्रा** चल रही हैं।`;
+
       } else if (intent === "safety") {
-        const verdict = safety_level === "SAFE" ? "हाँ, आज समुद्र में जाना सुरक्षित है।" : "आज समुद्र में जाने के लिए सावधानी आवश्यक है।";
-        finalAnswer = `🛡️ **सुरक्षा निर्णय**: ${verdict}\n\n• **सुरक्षा स्थिति**: **${dangerHi}** (जोखिम: ${final_danger_score}/100)\n• **लहरें**: ${wave_val} मीटर | **हवा**: ${wind_val} नॉट\n• **मौसम**: ${condHi} | **सीमा से दूरी**: ${d.imbl} किमी`;
+        const verdictBanner = safety_level === "SAFE"
+          ? `✅ **हाँ, आज ${regNameHi} के पास समुद्र में मछली पकड़ने जाना पूरी तरह सुरक्षित है।**`
+          : safety_level === "CAUTION"
+          ? `⚠️ **आज ${regNameHi} के पास समुद्र में जाने के लिए सावधानी बरतने की सलाह दी जाती है।**`
+          : `🚫 **नहीं, आज ${regNameHi} के पास समुद्र में जाना खतरनाक और असुरक्षित है।**`;
+        const verdictReason = safety_level === "SAFE"
+          ? `मौसमी और सागरीय आंकड़े अनुकूल हैं। हवा की गति **${wind_val} नॉट** (~${Math.round(wind_val * 1.852)} किमी/घंटा) दिशा ${d.wind_dir} है तथा लहरों की ऊंचाई नियंत्रित **${wave_val} मीटर** है।`
+          : safety_level === "CAUTION"
+          ? `तट के 3-5 नॉटिकल मील के भीतर स्थिति सामान्य है, परंतु गहरे समुद्र में **${wave_val} मीटर** की अशांत लहरें और **${d.wind_gusts} नॉट** के तेज झोंके हैं।`
+          : `खराब मौसम के कारण **${wave_val} मीटर** की ऊंची तूफानी लहरें और **${d.wind_gusts} नॉट** की तेज आंधी चल रही है।`;
+
+        finalAnswer = `${verdictBanner}\n\n${verdictReason} समग्र खतरा इंडेक्स **${final_danger_score}/100 (${dangerHi})** पर है तथा वायुदाब **${d.barometer} hPa** पर स्थिर है।\n\n` +
+          `यह क्षेत्र अंतरराष्ट्रीय समुद्री सीमा (IMBL) से **${d.imbl} किमी सुरक्षित दूरी** पर है। सभी मछुआरे लाइफ जैकेट अवश्य पहनें और VHF मरीन रेडियो चैनल 16 पर चालू रखें।`;
       } else {
         finalAnswer = `🛰️ **मत्स्य व सागरीय सूचना रिपोर्ट (${regNameHi})**:\n\n• **क्लोरोफिल**: ${chloro_val} मि.ग्रा., तापमान: ${sst_val}°C\n• **प्रमुख मछलियाँ**: ${(d.species_primary_hi || d.species_primary || []).join(", ")}\n• **सुरक्षा स्थिति**: **${dangerHi}** (जोखिम: ${final_danger_score}/100)`;
       }
@@ -901,9 +974,38 @@ export default function CopilotPage() {
         }
       } else if (intent === "tide") {
         finalAnswer = `⏳ **भरती-ओहोटी वेळापत्रक व शांत पाण्याची वेळ (${regNameMr})**:\n\n• 🔺 **पहिली भरती**: ${d.tide_ht} | 🔻 **पहिली ओहोटी**: ${d.tide_lt}\n• 🔺 **दुसरी भरती**: ${d.tide_ht2} | 🔻 **दुसरी ओहोटी**: ${d.tide_lt2}\n• **शांत पाण्याचा कालावधी**: ${d.slack_window_mr || d.slack_window}`;
+      } else if (intent === "danger_index_explanation") {
+        finalAnswer = `🧠 **धोका निर्देशांक (DANGER INDEX) चे सविस्तर वैज्ञानिक स्पष्टीकरण: ${final_danger_score}/100 (${dangerMr})**\n\n` +
+          `सध्या **${regNameMr}** भागातील धोका निर्देशांक **${final_danger_score}/100** निश्चित करण्यात आला आहे. याची ४ मुख्य वैज्ञानिक कारणे खालीलप्रमाणे आहेत:\n\n` +
+          `१. 💨 **वाऱ्याचा धोका घटक (${wind_risk.toFixed(1)} / ३५ गुण)**: वाऱ्याचा वेग **${wind_val} नॉट्स** (~${Math.round(wind_val * 1.852)} किमी/तास) आणि झोत **${d.wind_gusts} नॉट्स** च्या आधारे.\n` +
+          `२. 🌊 **लाटांचा उसळी घटक (${wave_risk.toFixed(1)} / ३५ गुण)**: लाटांची उंची **${wave_val} मीटर** आणि **${d.swell_period} सेकंद** उसळी कालावधीच्या आधारे.\n` +
+          `३. 🌐 **सागरी सीमा सुरक्षा (${Math.min(30.0, gis_risk).toFixed(1)} / ३० गुण)**: आंतरराष्ट्रीय सीमेपासून **${d.imbl} किमी** सुरक्षित.\n` +
+          `४. 👥 **मच्छीमार नोंदी व अलर्ट (${community_risk_mod >= 0 ? "+" : ""}${community_risk_mod} गुण)**: स्थानिक बंदरातील ताज्या नोंदींनुसार.\n\n` +
+          `**निष्कर्ष**: ${final_danger_score}/100 चा निर्देशांक दर्शवतो की सध्या समुद्रातील स्थिती **${dangerMr}** वर्गात आहे.`;
+
+      } else if (intent === "species_expected") {
+        const expSpeciesList = (d.species_primary_mr || d.species_primary || ["बांगडा", "पापलेट", "सुरमई", "टुना"]).join(", ");
+        finalAnswer = `🐟 **${regNameMr} जवळ मिळणारे अपेक्षित मासे (${time_ctx.mr || "या आठवड्यात"})**\n\n` +
+          `या आठवड्यात **${regNameMr}** किनारपट्टी व मध्य-शेल्फ भागात प्रामुख्याने **${expSpeciesList}** मुबलक मिळण्याची शक्यता आहे.\n\n` +
+          `• **योग्य खोली व अधिवास**: महाद्वीपीय शेल्फवर **२० - ५५ मीटर** खोलीच्या पट्ट्यात माशांचे मोठे थवे फिरत आहेत.\n` +
+          `• **सागरी परिस्थिती**: उपग्रहाद्वारे क्लोरोफिलचे प्रमाण **${chloro_val} mg/m³** आणि समुद्राचे तापमान **${sst_val}°C** नोंदवले गेले आहे, ज्यामुळे किनाऱ्यापासून २०-३५ किमी अंतरावर उत्तम थर्मल फ्रंट तयार झाला आहे.\n` +
+          `• **योग्य जाळे व पद्धत**: पहाटेच्या भरतीवेळी **ट्रोलिंग लाईन्स व मोठे ड्रिफ्ट जाळे** वापरल्यास भरपूर मासळी मिळेल.\n` +
+          `• **अंदाजे बाजारभाव**: सध्या गोदीतील लिलाव भाव **सुरमई: ₹६००-८५०/किलो, टुना: ₹२४०-३८०/किलो, बांगडा: ₹१४०-२२०/किलो** चालू आहेत.`;
+
       } else if (intent === "safety") {
-        const verdict = safety_level === "SAFE" ? "होय, आज समुद्रात जाणे पूर्णपणे सुरक्षित आहे." : "आज समुद्रात जाताना सावधगिरी बाळगावी.";
-        finalAnswer = `🛡️ **सुरक्षा निष्कर्ष**: ${verdict}\n\n• **सुरक्षा पातळी**: **${dangerMr}** (जोखिम: ${final_danger_score}/100)\n• **लाटांची उंची**: ${wave_val} मीटर | **वाऱ्याचा वेग**: ${wind_val} नॉट्स\n• **हवामान**: ${condMr} | **सीमेपासून अंतर**: ${d.imbl} किमी`;
+        const verdictBanner = safety_level === "SAFE"
+          ? `✅ **होय, आज ${regNameMr} जवळ समुद्रात मासेमारीला जाणे पूर्णपणे सुरक्षित आहे.**`
+          : safety_level === "CAUTION"
+          ? `⚠️ **आज ${regNameMr} जवळ समुद्रात जाताना विशेष सावधगिरी बाळगावी.**`
+          : `🚫 **नाही, आज ${regNameMr} जवळ समुद्रात जाणे अत्यंत धोकादायक आणि असुरक्षित आहे.**`;
+        const verdictReason = safety_level === "SAFE"
+          ? `हवामान आणि सागरी स्थिती पूर्णपणे अनुकूल आहे. वाऱ्याचा वेग **${wind_val} नॉट्स** (~${Math.round(wind_val * 1.852)} किमी/तास) दिशा ${d.wind_dir} असून लाटांची उंची केवळ **${wave_val} मीटर** (${d.sea_state_mr || d.sea_state}) आहे.`
+          : safety_level === "CAUTION"
+          ? `किनाऱ्याजवळ ३-५ सागरी मैलांपर्यंत स्थिती नियंत्रणात आहे, मात्र खुल्या समुद्रात **${wave_val} मीटर** उसळणाऱ्या लाटा आणि **${d.wind_gusts} नॉट्स** वाऱ्याचे झोत आहेत.`
+          : `खराब हवामानामुळे समुद्रात **${wave_val} मीटर** उंच लाटा आणि **${d.wind_gusts} नॉट्स** वेगाचे वादळी वारे वाहत आहेत.`;
+
+        finalAnswer = `${verdictBanner}\n\n${verdictReason} एकूण धोका निर्देशांक **${final_danger_score}/100 (${dangerMr})** असून हवेचा दाब **${d.barometer} hPa** वर स्थिर आहे.\n\n` +
+          `हे क्षेत्र आंतरराष्ट्रीय सागरी सीमेपासून (IMBL) **${d.imbl} किमी सुरक्षित अंतरावर** आहे. सर्व खलाशांनी लाईफ जॅकेट घालावे आणि VHF मरीन रेडिओ चॅनेल १६ वर सुरू ठेवावा.`;
       } else {
         finalAnswer = `🛰️ **मासेमारी व सागरी माहिती अहवाल (${regNameMr})**:\n\n• **क्लोरोफिल**: ${chloro_val} mg/m³, तापमान: ${sst_val}°C\n• **स्थानिक मासे**: ${(d.species_primary_mr || d.species_primary || []).join(", ")}\n• **सुरक्षा पातळी**: **${dangerMr}** (जोखिम: ${final_danger_score}/100)`;
       }

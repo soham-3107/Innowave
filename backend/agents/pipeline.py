@@ -1,7 +1,15 @@
 import re
+import os
+import json
 import random
-from typing import Dict, Any, List
+import logging
+import urllib.request
+import urllib.error
+from typing import Dict, Any, List, Optional, Tuple
 from agents.mock_data import MOCK_REGIONS, get_closest_region, COMMUNITY_REPORTS, GLOBAL_SPECIES_PROFILES
+
+logger = logging.getLogger("innowave_brain_agent")
+logger.setLevel(logging.INFO)
 
 def detect_language(text: str) -> str:
     """
@@ -22,9 +30,9 @@ def detect_language(text: str) -> str:
         "वादळ", "वादळाचा", "वादळाची", "वादळाचे", "वादळात", "चक्रीवादळ",
         "वेळ", "वेळापत्रक", "वेळेस", "साठी", "च्या", "ची", "चे", "चा", "तील", "तटावर",
         "समुद्रात", "उद्या", "काल", "लाटा", "लाटांची", "वारा", "वाऱ्याचा", "वाऱ्याची",
-        "किंवा", "सांगा", "मिळेल", "करा", "पाहिजे", "अहवाल", "किनारपट्टी", "किनारपट्टीवर",
+        "किंवा", "सांगा", "मिळेल", "मिळतील", "करा", "पाहिजे", "अहवाल", "किनारपट्टी", "किनारपट्टीवर",
         "इशारा", "बाजारभाव", "भाव", "जाळे", "जाळ्याचा", "खोली", "तळभाग", "मदत", "नंबर",
-        "फरक", "सांगू", "शकता", "निवडले", "लहान", "बोट", "जावे", "जाऊ"
+        "फरक", "सांगू", "शकता", "निवडले", "लहान", "बोट", "जावे", "जाऊ", "धोका", "निर्देशांक"
     }
     
     # Hindi grammatical markers, postpositions, question words, and distinct vocabulary
@@ -35,7 +43,7 @@ def detect_language(text: str) -> str:
         "मछली", "मछलियां", "मछुआरे", "मछुआरों", "पकड़ने", "पकड़ना", "तट",
         "मौसम", "तूफान", "चक्रवात", "जाना", "सकता", "सकती", "सकते", "चाहिए",
         "अच्छा", "अच्छी", "अच्छे", "बारे", "स्थिति", "बताओ", "दीजिए", "बताएं",
-        "दाम", "कीमत", "जाल", "गहराई", "सहायता", "हेल्पलाइन", "छोटी", "नाव", "सिफारिश", "अलग"
+        "दाम", "कीमत", "जाल", "गहराई", "सहायता", "हेल्पलाइन", "छोटी", "नाव", "सिफारिश", "अलग", "खतरा", "इंडेक्स", "उम्मीद"
     }
     
     words = re.findall(r"[\u0900-\u097F]+", clean_text)
@@ -54,9 +62,9 @@ def detect_language(text: str) -> str:
             marathi_score += 1
             
     # Multi-word phrase boosts
-    if re.search(r"\b(कौन\s+सा|कौन\s+सी|के\s+पास|में\s+जाना|सुरक्षित\s+है|है\s+क्या|मछली\s+पकड़ने|बाजार\s+भाव|कितनी\s+दूरी|जाना\s+चाहिए|क्यों\s+अलग|क्यों\s+सिफारिश)\b", clean_text):
+    if re.search(r"\b(कौन\s+सा|कौन\s+सी|के\s+पास|में\s+जाना|सुरक्षित\s+है|है\s+क्या|मछली\s+पकड़ने|बाजार\s+भाव|कितनी\s+दूरी|जाना\s+चाहिए|क्यों\s+अलग|क्यों\s+सिफारिश|खतरा\s+इंडेक्स)\b", clean_text):
         hindi_score += 4
-    if re.search(r"\b(कोणती\s+आहे|कोणता\s+आहे|वादळाचा\s+इशारा|आहे\s+का|नाही\s+का|सर्वोत्तम\s+वेळ|मासेमारीसाठी|काय\s+आहे|बाजारभाव\s+काय|जावे\s+का|जाऊ\s+का|फरक\s+का|का\s+निवडले)\b", clean_text):
+    if re.search(r"\b(कोणती\s+आहे|कोणता\s+आहे|वादळाचा\s+इशारा|आहे\s+का|नाही\s+का|सर्वोत्तम\s+वेळ|मासेमारीसाठी|काय\s+आहे|बाजारभाव\s+काय|जावे\s+का|जाऊ\s+का|फरक\s+का|का\s+निवडले|धोका\s+निर्देशांक)\b", clean_text):
         marathi_score += 4
 
     # Interrogative 'का' at sentence end or after Marathi verb is Marathi
@@ -111,7 +119,7 @@ def extract_time_context(text: str) -> dict:
     is_today = any(w in text_lower for w in ["today", "आज"])
     is_morning = any(w in text_lower for w in ["morning", "सकाळ", "सकाळी", "सुबह", "पहाटे", "सवेरे"])
     is_evening = any(w in text_lower for w in ["evening", "संध्याकाळ", "संध्याकाळी", "शाम", "रात्री", "रात", "night"])
-    is_week = any(w in text_lower for w in ["week", "हफ्ता", "आठवडा", "सप्ताह"])
+    is_week = any(w in text_lower for w in ["week", "हफ्ता", "आठवडा", "सप्ताह", "this week", "या आठवड्यात", "इस सप्ताह"])
     
     if is_tomorrow and is_morning:
         return {"key": "tomorrow morning", "en": "tomorrow morning", "hi": "कल सुबह", "mr": "उद्या सकाळी"}
@@ -125,12 +133,12 @@ def extract_time_context(text: str) -> dict:
         return {"key": "today evening", "en": "today evening", "hi": "आज शाम", "mr": "आज संध्याकाळी"}
     elif is_today:
         return {"key": "today", "en": "today", "hi": "आज", "mr": "आज"}
+    elif is_week:
+        return {"key": "this week", "en": "this week", "hi": "इस सप्ताह", "mr": "या आठवड्यात"}
     elif is_morning:
         return {"key": "morning", "en": "morning", "hi": "सुबह", "mr": "सकाळी"}
     elif is_evening:
         return {"key": "evening", "en": "evening", "hi": "शाम", "mr": "संध्याकाळी"}
-    elif is_week:
-        return {"key": "this week", "en": "this week", "hi": "इस सप्ताह", "mr": "या आठवड्यात"}
         
     return {"key": "", "en": "", "hi": "", "mr": ""}
 
@@ -160,6 +168,21 @@ def classify_granular_intent(query_lower: str) -> tuple[str, str]:
             break
 
     # 2. Specific Core Query Triggers
+
+    # Q: Explain why the danger index is what it is right now
+    is_danger_explanation = any(w in query_lower for w in [
+        "why the danger index", "why is the danger index", "explain why the danger", "explain the danger index",
+        "why danger index is", "why the danger score", "explain the danger score", "why danger is", "danger index right now",
+        "धोका निर्देशांक का", "धोक्याचा निर्देशांक का", "धोका का आहे", "धोका निर्देशांक समजावून", "खतरा इंडेक्स क्यों", "डेंजर स्कोर क्यों", "खतरा क्यों है"
+    ]) or (("danger" in query_lower or "threat" in query_lower or "धोका" in query_lower or "खतरा" in query_lower) and ("why" in query_lower or "explain" in query_lower or "का" in query_lower or "क्यों" in query_lower or "समझाएं" in query_lower or "सांगा" in query_lower or "निर्देशांक" in query_lower))
+
+    # Q: What species should I expect near Goa this week?
+    is_species_expected = any(w in query_lower for w in [
+        "what species should i expect", "species should i expect", "what species to expect", "what fish to expect",
+        "species can i expect", "what fish should i expect", "what species can i catch", "what fish can i catch", "what species are near",
+        "कोणते मासे मिळतील", "कोणत्या माशांची अपेक्षा आहे", "कोणते मासे मिळण्याची अपेक्षा",
+        "कौन सी मछली मिलने की उम्मीद", "कौन सी मछली मिलेगी", "कौन सी प्रजाति मिलेगी"
+    ]) or (("expect" in query_lower or "मिळेल" in query_lower or "मिळतील" in query_lower or "उम्मीद" in query_lower or "अपेक्षा" in query_lower) and ("species" in query_lower or "fish" in query_lower or "मासे" in query_lower or "मछली" in query_lower or "प्रजाति" in query_lower))
 
     # Q4: Why might the predicted fishing zone be different from where fishermen are actually catching fish?
     is_pfz_discrepancy = any(w in query_lower for w in [
@@ -258,6 +281,8 @@ def classify_granular_intent(query_lower: str) -> tuple[str, str]:
     ])
 
     # Intent Priority Resolution:
+    if is_danger_explanation:
+        return "danger_index_explanation", detected_species
     if is_pfz_discrepancy:
         return "pfz_discrepancy", detected_species
     if is_pfz_explanation:
@@ -266,6 +291,8 @@ def classify_granular_intent(query_lower: str) -> tuple[str, str]:
         return "small_boat_safety", detected_species
     if is_trip_advisory:
         return "trip_advisory", detected_species
+    if is_species_expected:
+        return "species_expected", detected_species
     if is_emergency:
         return "emergency", detected_species
     if is_market:
@@ -301,10 +328,154 @@ def classify_granular_intent(query_lower: str) -> tuple[str, str]:
         
     return "general", detected_species
 
+def construct_brain_system_prompt(lang: str = "en") -> str:
+    """
+    Constructs the rewritten system prompt for the Brain Agent (Requirement 4).
+    """
+    if lang == "hi":
+        return (
+            "आप INNOWAVE के मुख्य ब्रेन एजेंट (Brain Agent) हैं - एक विशेषज्ञ समुद्री बुद्धिमत्ता और मत्स्य वैज्ञानिक सहायक।\n"
+            "अनिवार्य नियम:\n"
+            "1. सीधे और तथ्यात्मक रूप से उपयोगकर्ता के विशिष्ट प्रश्न का उत्तर दें। प्रश्न में पूछे गए विशेष विवरणों (स्थान, समय, प्रजाति, हवा आदि) का स्पष्ट संदर्भ लें, सामान्य स्थिति सारांश न दें।\n"
+            "2. प्रत्येक उत्तर लगभग 150-250 शब्दों (4-6 ठोस वाक्य) का होना चाहिए। यदि प्रश्न हाँ/ना का है, तो भी 2-3 वाक्यों में उसका वैज्ञानिक कारण समझाएं।\n"
+            "3. प्रश्न के प्रकार के अनुसार अपनी उत्तर संरचना बदलें:\n"
+            "   - सुरक्षा प्रश्न: सीधे बोल्ड निर्णय (सुरक्षित/सावधानी/खतरा) और कारण से शुरू करें।\n"
+            "   - अपेक्षित प्रजाति/मछली प्रश्न: स्थान, समुद्रतल की गहराई और विशिष्ट मछलियों से शुरू करें।\n"
+            "   - खतरा इंडेक्स स्पष्टीकरण: सटीक खतरे के अंक (उदा. 18/100) और उसके घटकों (हवा, लहरें, सीमा दूरी, सामुदायिक अलर्ट) को समझाएं।\n"
+            "   - सर्वोत्तम समय प्रश्न: ज्वार-भाटा और शांत जल की प्रस्थान विंडो बताएं।\n"
+            "   - सामान्य प्रश्न: बिना किसी निश्चित बॉयलरप्लेट शीर्षक के एक स्वाभाविक और स्पष्ट पैराग्राफ लिखें।\n"
+            "4. सभी लाइव उपग्रह, मौसम, महासागर, ज्वार और सामुदायिक डेटा का सटीक उपयोग करें।"
+        )
+    elif lang == "mr":
+        return (
+            "तुम्ही INNOWAVE चे मुख्य ब्रेन एजंट (Brain Agent) आहात - एक तज्ज्ञ सागरी बुद्धिमत्ता आणि मत्स्य वैज्ञानिक सहाय्यक.\n"
+            "अनिवार्य नियम:\n"
+            "१. वापरकर्त्याच्या विशिष्ट प्रश्नाचे थेट आणि अचूक उत्तर द्या. सामान्य स्थिती सारांश देण्याऐवजी प्रश्नातील मुद्द्यांचा थेट उल्लेख करा.\n"
+            "२. प्रत्येक उत्तर साधारणपणे १५०-२५० शब्दांचे (४-६ अर्थपूर्ण वाक्ये) असावे. प्रश्न हो/नाही स्वरूपाचा असला तरी २-३ वाक्यांत त्याचे वैज्ञानिक कारण सांगा.\n"
+            "३. प्रश्नाच्या प्रकारानुसार उत्तराची रचना बदला:\n"
+            "   - सुरक्षा प्रश्न: थेट ठळक निष्कर्षाने (सुरक्षित/सावधगिरी/धोकादायक) व कारणाने सुरुवात करा.\n"
+            "   - अपेक्षित मासे प्रश्न: ठिकाण, समुद्राची खोली आणि मिळणारे विशिष्ट मासे याने सुरुवात करा.\n"
+            "   - धोका निर्देशांक स्पष्टीकरण: अचूक धोका गुण (उदा. १८/१००) आणि त्याचे घटक (वारे, लाटा, सीमा, मच्छीमार नोंदी) स्पष्ट करा.\n"
+            "   - सर्वोत्तम वेळ प्रश्न: भरती-ओहोटी व शांत पाण्याची प्रस्थान वेळ सांगा.\n"
+            "   - सर्वसाधारण प्रश्न: कोणत्याही ठराविक मथळ्यांशिवाय एक सुसंगत आणि माहितीपूर्ण परिच्छेद लिहा.\n"
+            "४. सर्व उपग्रह, हवामान, सागरी प्रवाह आणि मच्छीमार नोंदींचा अचूक वापर करा."
+        )
+    else:
+        return (
+            "You are the Brain Agent for INNOWAVE, an expert collaborative marine intelligence and fisheries scientific copilot.\n"
+            "Strict Instructions:\n"
+            "1. Directly answer the specific question asked, referencing the exact details and terminology in it, rather than giving a generic status summary.\n"
+            "2. Aim for 150-250 words per response (roughly 4-6 sentences of substance) unless the question is a simple yes/no, in which case still provide 2-3 sentences of reasoning behind the verdict.\n"
+            "3. Pull in the actual live data from Ocean, Satellite, Tide, GIS, Weather, and Community agents for that specific query (location, species, time window mentioned) rather than a boilerplate coastal summary.\n"
+            "4. Vary your response structure based on the question type:\n"
+            "   - Safety questions: Lead directly with the bold safety verdict (SAFE / CAUTION / DANGER) and composite threat score, followed by atmospheric & wave parameters and emergency precautions.\n"
+            "   - Expected species / fishing zone questions: Lead directly with location, shelf bathymetry, and specific target species expected, followed by optimal depths, water temperature, chlorophyll front, gear, and market prices.\n"
+            "   - Danger index explanation questions: Lead directly with the exact calculated danger score (e.g. 18/100) and break down the mathematical/physical components (wind risk, wave swell risk, GIS boundary risk, and community alert adjustments).\n"
+            "   - Best time / timing questions: Lead directly with the optimal harbor exit and fishing windows based on tidal influx and slack periods.\n"
+            "   - General questions: Read as a natural, cohesive multi-agent paragraph without repetitive boilerplate headers."
+        )
+
+def call_llm_api_if_configured(system_prompt: str, user_prompt: str, user_query: str) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Attempts to call a configured LLM provider (OpenAI, Gemini, Groq, Anthropic, or Ollama).
+    Prints and logs the exact prompt string right before the API call (Requirement 1).
+    Logs explicit errors if any occur (Requirement 2).
+    Returns (response_text, error_message)
+    """
+    full_prompt_log = (
+        f"============================================================\n"
+        f"BRAIN AGENT - FINAL PROMPT SENT TO MODEL\n"
+        f"USER QUERY: \"{user_query}\"\n"
+        f"------------------------------------------------------------\n"
+        f"SYSTEM PROMPT:\n{system_prompt}\n"
+        f"------------------------------------------------------------\n"
+        f"USER PROMPT:\n{user_prompt}\n"
+        f"============================================================"
+    )
+    logger.info("%s", full_prompt_log)
+    print(f"\n[Brain Agent] Final Prompt string sent to LLM:\n{full_prompt_log}\n")
+
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    groq_key = os.environ.get("GROQ_API_KEY")
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    ollama_url = os.environ.get("OLLAMA_HOST") or os.environ.get("LOCAL_LLM_URL")
+
+    try:
+        if groq_key:
+            req_data = json.dumps({
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.4
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/chat/completions",
+                data=req_data,
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                return result["choices"][0]["message"]["content"], None
+
+        elif openai_key:
+            req_data = json.dumps({
+                "model": "gpt-4o-mini",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                "temperature": 0.4
+            }).encode("utf-8")
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/chat/completions",
+                data=req_data,
+                headers={"Authorization": f"Bearer {openai_key}", "Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                return result["choices"][0]["message"]["content"], None
+
+        elif gemini_key:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+            req_data = json.dumps({
+                "contents": [
+                    {"parts": [{"text": f"{system_prompt}\n\n{user_prompt}"}]}
+                ]
+            }).encode("utf-8")
+            req = urllib.request.Request(url, data=req_data, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                return result["candidates"][0]["content"]["parts"][0]["text"], None
+
+        elif ollama_url:
+            base = ollama_url.rstrip("/")
+            url = f"{base}/api/generate" if "/api" not in base else base
+            req_data = json.dumps({
+                "model": "llama3",
+                "prompt": f"{system_prompt}\n\nUser Question:\n{user_prompt}",
+                "stream": False
+            }).encode("utf-8")
+            req = urllib.request.Request(url, data=req_data, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                return result.get("response", ""), None
+
+    except Exception as e:
+        error_msg = f"LLM API call exception: {type(e).__name__} - {str(e)}"
+        logger.error("Brain Agent LLM Call Failed: %s", error_msg, exc_info=True)
+        print(f"\n[Brain Agent ERROR] {error_msg}\n")
+        return None, error_msg
+
+    return None, None
+
 def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float = None) -> Dict[str, Any]:
     """
     Executes dynamic Multi-Agent collaborative reasoning across 15+ specialized domains
     with natural multilingual synthesis in English, Hindi, and Marathi.
+    No query caching is performed (Requirement 3).
     """
     trace = []
     lang = detect_language(query)
@@ -363,21 +534,21 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
     species_profiles = region_data.get("species_profiles", {})
 
     # Specialized Agent Trace Execution matching specific intents
-    if intent in ["weather", "storm", "safety", "general", "timing", "trip_advisory", "small_boat_safety"]:
+    if intent in ["weather", "storm", "safety", "general", "timing", "trip_advisory", "small_boat_safety", "danger_index_explanation"]:
         trace.append({
             "agent": "Weather Agent",
             "status": "completed",
             "message": f"Atmospheric scan: Wind speed **{wind_val} knots ({wind_kmh} km/h)** [{region_data['weather']['wind_direction']}], Gusts up to **{region_data['weather']['wind_gusts']} kts**, Barometer: **{region_data['weather']['barometric_pressure']} hPa** ({region_data['weather']['pressure_trend']}). Conditions: **{region_data['weather']['condition']}**."
         })
         
-    if intent in ["wave", "ocean", "safety", "general", "bathymetry", "trip_advisory", "small_boat_safety", "pfz_explanation"]:
+    if intent in ["wave", "ocean", "safety", "general", "bathymetry", "trip_advisory", "small_boat_safety", "pfz_explanation", "danger_index_explanation"]:
         trace.append({
             "agent": "Ocean Agent",
             "status": "completed",
             "message": f"Hydrodynamic check: Significant wave swell **{wave_val}m** (Period: **{region_data['ocean']['swell_period']}s**, Dir: **{region_data['ocean']['swell_direction']}**). Surface drift current: **{region_data['ocean']['current_speed']} knots** ({region_data['ocean']['current_direction']}). Sea State: **{region_data['ocean']['sea_state']}**."
         })
         
-    if intent in ["satellite", "fish_general", "species_profile", "market", "timing", "pfz_discrepancy", "pfz_explanation"]:
+    if intent in ["satellite", "fish_general", "species_profile", "species_expected", "market", "timing", "pfz_discrepancy", "pfz_explanation"]:
         trace.append({
             "agent": "Satellite Agent",
             "status": "completed",
@@ -391,7 +562,7 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
             "message": f"Tidal Telemetry: High Tide 1: **{region_data['tide']['high_tide_1']}**, Low Tide 1: **{region_data['tide']['low_tide_1']}**, High Tide 2: **{region_data['tide']['high_tide_2']}**. Slack Window: **{region_data['tide']['slack_window']}** (Sandbar clearance draft: {region_data['tide']['sandbar_clearance_m']}m)."
         })
         
-    if intent in ["gis", "safety", "emergency", "general", "pfz_explanation"]:
+    if intent in ["gis", "safety", "emergency", "general", "pfz_explanation", "danger_index_explanation"]:
         restricted_msgs = [f"{z['name']} ({z['distance_km']} km - {z['status']})" for z in region_data["gis"]["restricted_zones"]]
         trace.append({
             "agent": "GIS Agent",
@@ -399,14 +570,14 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
             "message": f"Geospatial Security Scan: Distance to International Boundary (IMBL) is **{region_data['gis']['distance_to_imbl']} km** ({region_data['gis']['imbl_status']}). Restricted sectors: {', '.join(restricted_msgs)}."
         })
         
-    if intent in ["gear", "species_profile", "fish_general", "pfz_discrepancy"]:
+    if intent in ["gear", "species_profile", "species_expected", "fish_general", "pfz_discrepancy"]:
         trace.append({
             "agent": "Ecology & Gear Agent",
             "status": "completed",
             "message": f"Ecosystem audit: Primary coastal biomass baseline contains **{', '.join(species_info.get('primary', []))}**. Recommended sustainable mesh configuration: **{species_info.get('gear', 'Standard Pelagic Nets')}**."
         })
 
-    if intent in ["market", "general"]:
+    if intent in ["market", "general", "species_expected"]:
         trace.append({
             "agent": "Economic Agent",
             "status": "completed",
@@ -425,7 +596,7 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
     community_risk_mod = 0
     if len(region_reports) > 0:
         latest_rep = region_reports[0]
-        if intent in ["community", "general", "safety", "fish_general", "pfz_explanation"]:
+        if intent in ["community", "general", "safety", "fish_general", "pfz_explanation", "danger_index_explanation"]:
             trace.append({
                 "agent": "Community Agent",
                 "status": "completed",
@@ -467,7 +638,7 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
     total_risk = round(max(0, min(100, wind_risk + wave_risk + gis_risk + community_risk_mod)))
     danger_level = "SAFE" if total_risk < 40 else "CAUTION" if total_risk < 70 else "DANGER"
 
-    if intent in ["safety", "storm", "general", "trip_advisory", "small_boat_safety", "pfz_explanation"]:
+    if intent in ["safety", "storm", "general", "trip_advisory", "small_boat_safety", "pfz_explanation", "danger_index_explanation"]:
         trace.append({
             "agent": "Risk Agent",
             "status": "completed",
@@ -510,828 +681,460 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
     danger_hi = "पूर्णतः सुरक्षित" if danger_level == "SAFE" else "सावधानी बरतें (मध्यम जोखिम)" if danger_level == "CAUTION" else "खतरा / असुरक्षित"
     danger_mr = "पूर्णपणे सुरक्षित" if danger_level == "SAFE" else "सावधगिरी बाळगा (मध्यम धोका)" if danger_level == "CAUTION" else "धोकादायक / असुरक्षित"
 
-    # Brain Agent Multilingual Synthesis across distinct domains
-    if lang == "en":
-        time_prefix = f" for **{time_ctx['en']}**" if time_ctx["en"] else ""
-        intro = f"Regarding your inquiry about {reg_name_en}{time_prefix}:"
-        
-        if intent == "trip_advisory":
-            if total_risk < 40:
-                verdict_banner = "✅ **YES, CONDITIONS ARE FAVORABLE TO GO FISHING TOMORROW.**"
-                verdict_sub = "Weather, waves, and atmospheric conditions are well within safe operating limits."
-            elif total_risk < 70:
-                verdict_banner = "⚠️ **PROCEED WITH CAUTION — NEARSHORE FISHING ONLY.**"
-                verdict_sub = "Nearshore waters are manageable, but offshore deep sea has choppy swells and gusty winds."
-            else:
-                verdict_banner = "❌ **NO, IT IS NOT SAFE TO GO FISHING TOMORROW.**"
-                verdict_sub = "Dangerous marine conditions with high wave swells and severe wind gusts are forecasted."
+    # 1. Build System and User Prompt for Brain Agent (Requirement 1 & Requirement 4)
+    system_prompt = construct_brain_system_prompt(lang)
+    user_prompt = (
+        f"USER QUESTION: \"{query}\"\n\n"
+        f"DETECTED INTENT: {intent.upper()}\n"
+        f"LOCATION CONTEXT: {reg_name_en} ({location_key})\n"
+        f"TIME CONTEXT: {time_ctx['en'] if time_ctx['en'] else 'Current / Immediate'}\n"
+        f"TARGET SPECIES: {target_species if target_species else 'General Pelagic'}\n\n"
+        f"LIVE MULTI-AGENT TELEMETRY DATA:\n"
+        f"- Weather Agent: Wind {wind_val} kts ({wind_kmh} km/h) {region_data['weather']['wind_direction']}, Gusts {region_data['weather']['wind_gusts']} kts, Pressure {region_data['weather']['barometric_pressure']} hPa, Sky: {region_data['weather']['condition']}\n"
+        f"- Ocean Agent: Significant Wave Swell {wave_val}m, Period {region_data['ocean']['swell_period']}s ({region_data['ocean']['swell_direction']}), Surface Current {region_data['ocean']['current_speed']} kts ({region_data['ocean']['current_direction']}), Sea State: {region_data['ocean']['sea_state']}\n"
+        f"- Satellite Agent: Chlorophyll-a {chloro_val} mg/m³, SST {sst_val}°C, Thermal Front: {region_data['satellite']['thermal_front']}\n"
+        f"- Tide Agent: High Tide 1 {region_data['tide']['high_tide_1']}, Low Tide 1 {region_data['tide']['low_tide_1']}, Slack Window: {region_data['tide']['slack_window']}\n"
+        f"- GIS Agent: IMBL Distance {region_data['gis']['distance_to_imbl']} km, Sector: {region_data['gis']['restricted_zones'][0]['name']}\n"
+        f"- Risk Agent: Composite Danger Score {total_risk}/100 ({danger_level}) [Wind component: {round(wind_risk, 1)}, Wave component: {round(wave_risk, 1)}, GIS component: {round(gis_risk, 1)}, Community mod: {community_risk_mod:+}]\n"
+        f"- Community Agent: {len(region_reports)} verified harbor logs\n"
+        f"- Ecology & Market: Primary species [{', '.join(species_info.get('primary', []))}], Auction prices: {region_data['economics']['dockside_prices']}\n\n"
+        f"Generate the Brain Agent response in {lang_name} following all required structure and substance guidelines."
+    )
 
-            body = (
-                f"{verdict_banner}\n{verdict_sub}\n\n"
-                f"📊 **Detailed Environmental Breakdown for {reg_name_en}**:\n\n"
-                f"1. 🌤️ **Weather & Wind**:\n"
-                f"   • **Wind Speed**: **{wind_val} knots ({wind_kmh} km/h)** from {region_data['weather']['wind_direction']}\n"
-                f"   • **Peak Gusts**: Up to **{region_data['weather']['wind_gusts']} knots**\n"
-                f"   • **Atmospheric Pressure**: **{region_data['weather']['barometric_pressure']} hPa** ({region_data['weather']['pressure_trend']})\n"
-                f"   • **Rain Probability**: {region_data['weather']['precipitation']}% ({region_data['weather']['condition']})\n\n"
-                f"2. 🌊 **Wave Height & Sea State**:\n"
-                f"   • **Significant Wave Height**: **{wave_val} meters** (approx. {wave_ft} feet)\n"
-                f"   • **Swell Period & Direction**: **{region_data['ocean']['swell_period']} seconds** from {region_data['ocean']['swell_direction']}\n"
-                f"   • **Sea State**: **{region_data['ocean']['sea_state']}**\n"
-                f"   • **Surface Current**: {region_data['ocean']['current_speed']} knots heading {region_data['ocean']['current_direction']}\n\n"
-                f"3. ⏳ **Optimal Departure & Return Window**:\n"
-                f"   • **High Tide**: {region_data['tide']['high_tide_1']} | **Low Tide**: {region_data['tide']['low_tide_1']}\n"
-                f"   • **Safe Harbor Departure Window (Slack Water)**: **{region_data['tide']['slack_window']}**\n"
-                f"   • **Sandbar Depth**: {region_data['tide']['sandbar_clearance_m']}m draft clearance\n\n"
-                f"4. 📋 **Mandatory Pre-Trip Safety Checklist**:\n"
-                f"   • Put on ISI-approved lifejackets before untying from the jetty.\n"
-                f"   • Keep VHF Marine Radio switched on and monitoring **Channel 16 (156.800 MHz)**.\n"
-                f"   • Check engine battery, clean fuel lines, and carry 48-hour reserve drinking water.\n"
-                f"   • Inform the local harbor master or family ashore about your planned coordinates and expected return time."
-            )
+    # 2. Attempt LLM API call if configured (Requirement 1 & 2)
+    llm_response, llm_error = call_llm_api_if_configured(system_prompt, user_prompt, query)
+    
+    if llm_response:
+        final_answer = llm_response.strip()
+    else:
+        # 3. Dynamic Brain Agent Multi-Agent Synthesis (conforming strictly to Requirement 4)
+        if lang == "en":
+            if intent == "safety":
+                if danger_level == "SAFE":
+                    verdict_banner = "✅ **YES, IT IS SAFE TO GO FISHING NEAR MUMBAI TODAY.**" if "mumbai" in location_key else f"✅ **YES, IT IS SAFE TO GO FISHING NEAR {reg_name_en.upper()} TODAY.**"
+                    verdict_reason = f"Atmospheric and hydrodynamic telemetry indicate favorable sea conditions across {reg_name_en}. Sustained winds are moderate at **{wind_val} knots ({wind_kmh} km/h)** from {region_data['weather']['wind_direction']} with peak gusts under {region_data['weather']['wind_gusts']} knots, and significant wave swells are stable at **{wave_val} meters** ({region_data['ocean']['sea_state']})."
+                elif danger_level == "CAUTION":
+                    verdict_banner = f"⚠️ **CAUTION IS ADVISED BEFORE GOING FISHING NEAR {reg_name_en.upper()} TODAY.**"
+                    verdict_reason = f"While nearshore waters within 3-5 nautical miles are manageable, choppy wave swells of **{wave_val} meters** and gusty winds reaching **{region_data['weather']['wind_gusts']} knots** create moderate risk for smaller crafts."
+                else:
+                    verdict_banner = f"🚫 **NO, IT IS NOT SAFE TO GO FISHING NEAR {reg_name_en.upper()} TODAY.**"
+                    verdict_reason = f"Severe marine hazards are active with heavy wave swells of **{wave_val} meters** and squall wind gusts exceeding **{region_data['weather']['wind_gusts']} knots**, making sea ventures highly dangerous."
 
-        elif intent == "species_profile":
-            sp_key = target_species if target_species else "tuna"
-            prof = species_profiles.get(sp_key) or GLOBAL_SPECIES_PROFILES.get(sp_key) or GLOBAL_SPECIES_PROFILES["tuna"]
-            
-            body = (
-                f"🐟 **Target Species Guide: {prof.get('name', 'Marine Species')}** (*{prof.get('scientific', '')}*)\n\n"
-                f"📍 **1. Best Location & Oceanic Zone**:\n"
-                f"   • **Hotspot Area**: {prof.get('hotspot', 'Continental shelf drop-offs 25-60 km offshore')}\n"
-                f"   • **Oceanographic Feature**: Target thermal front boundaries (boundary between warm and cool water masses) and chlorophyll-rich upwelling zones.\n\n"
-                f"📏 **2. Target Swimming Depth**:\n"
-                f"   • **Depth Range**: **{prof.get('depth', '30 - 80 meters')}**\n"
-                f"   • **Behavior**: For tuna and large pelagics, fish cruise between 30m and 80m during the day along the 100m shelf contour and surface feed at dawn/dusk.\n\n"
-                f"🪱 **3. Recommended Bait, Tackle & Gear**:\n"
-                f"   • **Best Bait**: {prof.get('bait', 'Live Indian Mackerel, fresh sardines, squid strips, and silver trolling spoons')}\n"
-                f"   • **Recommended Gear**: {prof.get('gear', 'Heavy Pelagic Longlines, Surface Trolling Lines, & Heavy Driftnets')}\n"
-                f"   • **Tackle Advice**: Use heavy monofilament or wire trace leaders (to prevent bite-offs from sharp teeth) with circle hooks (#8/0 to #10/0 or #16/0).\n\n"
-                f"🌤️ **4. Ideal Weather & Sea Conditions to Look For**:\n"
-                f"   • **Optimal Water Temperature**: **{prof.get('temp_opt', '27.0°C - 29.5°C')}** (Current SST in {reg_name_en}: {sst_val}°C)\n"
-                f"   • **Sea & Sky Conditions**: {prof.get('weather_conditions', 'Clear skies, mild winds (<14 knots), slight sea surface chop')}\n"
-                f"   • **Visual Signs**: Look for diving seabirds (terns, gannets) or surface baitfish jumping, which indicates predator fish hunting below.\n\n"
-                f"💰 **5. Dockside Market Value & Quality Preservation**:\n"
-                f"   • **Estimated Auction Price**: **{prof.get('market_price', '₹350 - ₹580/kg')}**\n"
-                f"   • **Preservation**: Bleed fish immediately upon catch and pack in 1:1 ratio crushed ice slurry to preserve freshness and export-grade value."
-            )
-
-        elif intent == "small_boat_safety":
-            body = (
-                f"🛡️ **Small Boat Safety Assessment (Wind Speed: 25 km/h / 13.5 knots)**:\n\n"
-                f"⚠️ **DIRECT VERDICT: CAUTION — AVOID DEEP OFFSHORE WATERS IN A SMALL BOAT.**\n\n"
-                f"**Why 25 km/h Wind is Risky for Small Boats (Simple Explanation)**:\n\n"
-                f"1. 🌊 **Wave Height & Chop Formation**:\n"
-                f"   • A sustained wind of **25 km/h (13.5 knots / Force 4 on Beaufort Scale)** creates choppy, steep waves between **1.2 and 1.8 meters** with breaking whitecaps.\n"
-                f"   • For large steel trawlers, this is manageable. But for **small FRP (fiberglass) or wooden boats (under 28-32 feet)**, wave crests can easily splash water over the side walls (low freeboard).\n\n"
-                f"2. ⚠️ **Boat Rolling & Capsizing Hazards**:\n"
-                f"   • In a small boat, hauling heavy nets or turning side-on (beam sea) to 1.5m waves creates severe boat rolling and risk of swamping.\n"
-                f"   • High engine spray and hull pounding make steering difficult and cause quick crew fatigue.\n\n"
-                f"📍 **Safe Operating Guidelines for Small Craft Operators**:\n\n"
-                f"• **Stay Nearshore**: Operate only within sheltered coastal waters (within **3 to 5 nautical miles / 5 to 8 km from shore**). Do NOT venture 15 to 40 km into open deep offshore zones.\n"
-                f"• **Balance the Load**: Distribute nets, ice boxes, and crew weight evenly along the center keel of the boat to prevent tilting.\n"
-                f"• **Keep Engine Steady**: Ride waves at a 45-degree angle; never take steep waves directly side-on.\n"
-                f"• **Safety Equipment**: Ensure all crew members wear lifejackets, and keep a manual bailer bucket or bilge pump ready at all times.\n"
-                f"• **Immediate Return Trigger**: If wind gusts exceed **30 km/h (16 kts)** or dark storm clouds form on the horizon, turn back to harbor immediately."
-            )
-
-        elif intent == "pfz_discrepancy":
-            body = (
-                f"🔍 **Why Predicted Fishing Zones (PFZ) May Differ from Actual Catch Locations**:\n\n"
-                f"It is common for fishermen to find fish a few kilometers away from the exact predicted satellite mark. Here are the **5 main scientific and practical reasons explained simply**:\n\n"
-                f"1. 🛰️ **Satellite Imagery Time Lag (12 to 24 Hours)**:\n"
-                f"   • Satellites (like ISRO Oceansat-3 or NOAA) capture ocean color and temperature snapshots once or twice a day when orbiting overhead.\n"
-                f"   • In the **12 to 24 hours** between when the satellite takes the image and when your boat arrives, **ocean surface currents and tidal drift (moving at 0.5 - 1.5 knots)** have pushed that entire water body **5 to 15 kilometers** in the direction of the current.\n\n"
-                f"2. 🌊 **Surface vs. Deep Water Thermoclines**:\n"
-                f"   • Satellites only scan the **top 1 to 2 millimeters** (the 'ocean skin') for temperature and color.\n"
-                f"   • However, fish like Pomfret, Ghol, or Tuna often swim **20 to 60 meters deep** where cooler water (thermocline) and bait actually rest. Deep underwater currents can move independently of surface water.\n\n"
-                f"3. 🦐 **The Food Chain Delay (Plankton vs. Predator Movement)**:\n"
-                f"   • Satellite chlorophyll identifies **microscopic plant plankton** (algae blooms).\n"
-                f"   • Small baitfish (sardines, anchovies) arrive to graze on the plankton, and larger predator fish (Tuna, Surmai, Kingfish) chase the small fish.\n"
-                f"   • Predators are frequently **5 to 10 kilometers downstream** following the moving food chain rather than sitting at the exact center of the green plankton bloom.\n\n"
-                f"4. 🚤 **Vessel Noise & Fishing Pressure**:\n"
-                f"   • When many boats converge on the same publicized PFZ coordinates, engine vibrations and propeller noise frighten shoaling fish, causing schools to scatter into nearby quieter trenches.\n\n"
-                f"5. ☁️ **Cloud Cover & Monsoon Obstruction**:\n"
-                f"   • Heavy cloud cover blocks optical satellite sensors. When clouds are present, forecast models use mathematical estimation until clear skies return, which can introduce slight coordinate offsets."
-            )
-
-        elif intent == "pfz_explanation":
-            body = (
-                f"🧠 **Multi-Agent Explanation: Why INNOWAVE Recommended This Potential Fishing Zone**:\n\n"
-                f"INNOWAVE combines satellite oceanography, marine biology, hydrodynamic sensors, and safety boundaries to recommend this zone. Here is the step-by-step reasoning:\n\n"
-                f"1. 🌿 **High Plankton Food Density (Satellite Ocean Color)**:\n"
-                f"   • Chlorophyll-a concentration was measured at **{chloro_val} mg/m³** by ISRO Oceansat-3 remote sensing sensors.\n"
-                f"   • High chlorophyll indicates a thriving **microscopic diatom plankton bloom**, which serves as the primary food source attracting huge shoals of sardines, mackerel, and anchovies.\n\n"
-                f"2. 🌡️ **Thermal Front Upwelling (Cold & Warm Current Collision)**:\n"
-                f"   • Sea Surface Temperature (SST) sensors detected a sharp thermal gradient (**{sst_val}°C boundary**).\n"
-                f"   • Where cold bottom currents collide with warm surface water, natural **upwelling** occurs, pushing nutrient-rich minerals from the seabed toward the surface where sunlight triggers intense biological activity.\n\n"
-                f"3. 🗺️ **Bathymetric Continental Shelf Funneling**:\n"
-                f"   • This zone lies along the **{region_data['bathymetry']['shelf_width_km']} km wide continental shelf contour** (depth: 25m - 60m).\n"
-                f"   • Underwater ridges and slopes create natural bottlenecks that trap schooling fish and prevent them from scattering into open ocean depths.\n\n"
-                f"4. 🛡️ **Comprehensive Multi-Agent Safety Verification**:\n"
-                f"   • Weather check: Wind speed is **{wind_val} knots ({wind_kmh} km/h)** and wave swells are **{wave_val}m**, well within safe operational limits.\n"
-                f"   • Security check: The zone is located **{region_data['gis']['distance_to_imbl']} km safely inside Indian territorial waters** and completely clear of restricted naval dockyards and shipping transit channels.\n\n"
-                f"5. 👥 **Ground Validation by Community Catch Logs**:\n"
-                f"   • Verified against CMFRI seasonal species patterns and recent harbor reports confirming active catches in this sector."
-            )
-
-        elif intent == "gear":
-            body = (
-                f"🎣 **Recommended Gear & Net Configuration for {reg_name_en}**:\n\n"
-                f"• **Primary Recommended Gear**: {species_info.get('gear', 'Pelagic Drift Nets & Gillnets')}\n"
-                f"• **Operating Depth Range**: {species_info.get('depth_range', '15-45m')}\n"
-                f"• **Target Species**: {', '.join(species_info.get('primary', []))}\n"
-                f"• **Net Mesh Regulations**: Mesh size limits (min 25mm for small pelagics, 120-140mm for large pomfret/surmai) to protect juvenile fish.\n"
-                f"• **Deployment Advice**: Current is {region_data['ocean']['current_speed']} kts ({region_data['ocean']['current_direction']}) — set driftnets perpendicular to the tidal flow."
-            )
-
-        elif intent == "market":
-            prices_str = "\n".join([f"  • **{k}**: {v}" for k, v in region_data["economics"]["dockside_prices"].items()])
-            body = (
-                f"💰 **Dockside Market Rates & Economic Insights ({reg_name_en})**:\n\n"
-                f"**Current Estimated Fish Auction Rates**:\n{prices_str}\n\n"
-                f"⛽ **Fuel Optimization**: {region_data['economics']['fuel_saving_tips']}\n"
-                f"🧊 **Preservation Guide**: {region_data['economics']['ice_ratio']} recommended for optimal market freshness."
-            )
-
-        elif intent == "emergency":
-            checklist_str = "\n".join([f"  ✅ {item}" for item in region_data["emergency"]["mandatory_checklist"]])
-            body = (
-                f"🚨 **Emergency Helplines & Maritime Safety Protocol ({reg_name_en})**:\n\n"
-                f"• 📞 **Indian Coast Guard 24x7 Distress**: **{region_data['emergency']['coast_guard_helpline']}**\n"
-                f"• 📻 **International Distress Frequency**: **{region_data['emergency']['mrcc_frequency']}**\n"
-                f"• 👮 **Coastal Police Control**: **{region_data['emergency']['coastal_police']}**\n\n"
-                f"**Mandatory Pre-Sailing Safety Checklist**:\n{checklist_str}"
-            )
-
-        elif intent == "wave":
-            body = (
-                f"🌊 **Hydrodynamics & Sea State Analysis for {reg_name_en}**:\n\n"
-                f"• **Significant Wave Height**: **{wave_val} meters** ({wave_ft} feet)\n"
-                f"• **Swell Period & Heading**: **{region_data['ocean']['swell_period']} seconds** from **{region_data['ocean']['swell_direction']}**\n"
-                f"• **Surface Drift Current**: **{region_data['ocean']['current_speed']} knots** heading {region_data['ocean']['current_direction']}\n"
-                f"• **Sea State Severity**: **{region_data['ocean']['sea_state']}**\n"
-                f"• **Underwater Visibility**: {region_data['ocean']['underwater_visibility_m']} meters (SST: {sst_val}°C)"
-            )
-
-        elif intent == "weather":
-            body = (
-                f"🌤️ **Atmospheric & Weather Telemetry for {reg_name_en}**:\n\n"
-                f"• **Wind Speed**: **{wind_val} knots ({wind_kmh} km/h)** from {region_data['weather']['wind_direction']}\n"
-                f"• **Peak Wind Gusts**: **{region_data['weather']['wind_gusts']} knots**\n"
-                f"• **Barometric Pressure**: **{region_data['weather']['barometric_pressure']} hPa** ({region_data['weather']['pressure_trend']})\n"
-                f"• **Precipitation Probability**: {region_data['weather']['precipitation']}%\n"
-                f"• **Air Temperature & Humidity**: {region_data['weather']['air_temperature']}°C | {region_data['weather']['humidity']}%\n"
-                f"• **Marine Visibility**: {region_data['weather']['visibility_nm']} nautical miles ({region_data['weather']['condition']})"
-            )
-
-        elif intent == "storm":
-            if has_storm_warning:
-                warnings_str = ", ".join(region_data["weather"].get("warnings", ["Squall Advisory"]))
                 body = (
-                    f"⚠️ **STORM & CYCLONE ALERT**: Active storm advisory in effect for {reg_name_en} ({warnings_str})!\n\n"
-                    f"• Wind Speed: **{wind_val} knots ({wind_kmh} km/h)** with squall gusts to **{region_data['weather']['wind_gusts']} kts**\n"
-                    f"• Swells: **{wave_val}m** ({region_data['ocean']['sea_state']})\n"
-                    f"• Barometer: **{region_data['weather']['barometric_pressure']} hPa** ({region_data['weather']['pressure_trend']})\n"
-                    f"🛡️ **Advisory**: Fishermen are strictly warned NOT to venture into open waters. Return to port immediately."
-                )
-            else:
-                body = (
-                    f"✅ **NO STORM ALERT**: No active storm, cyclone, or squall warnings for {reg_name_en}.\n\n"
-                    f"• Weather: {region_data['weather']['condition']}\n"
-                    f"• Winds: {wind_val} knots | Swells: {wave_val}m | Barometer: {region_data['weather']['barometric_pressure']} hPa (Steady)"
+                    f"{verdict_banner}\n\n"
+                    f"{verdict_reason} The composite danger score is currently **{total_risk}/100 ({danger_level})**, with barometric pressure holding steady at **{region_data['weather']['barometric_pressure']} hPa** under {region_data['weather']['condition']}.\n\n"
+                    f"Vessels are located **{region_data['gis']['distance_to_imbl']} km safely clear of the International Maritime Boundary Line (IMBL)**. Motorized crafts are cleared for standard daytime voyages, but all crews must wear ISI-approved lifejackets and keep VHF Marine Radio tuned to **{region_data['emergency']['mrcc_frequency']}** for real-time Coast Guard updates."
                 )
 
-        elif intent == "tide":
-            body = (
-                f"⏳ **Tidal Schedule & Navigation Window ({reg_name_en})**:\n\n"
-                f"• 🔺 **High Tide 1**: {region_data['tide']['high_tide_1']}\n"
-                f"• 🔻 **Low Tide 1**: {region_data['tide']['low_tide_1']}\n"
-                f"• 🔺 **High Tide 2**: {region_data['tide']['high_tide_2']}\n"
-                f"• 🔻 **Low Tide 2**: {region_data['tide']['low_tide_2']}\n\n"
-                f"• **Tidal Range & Cycle**: {region_data['tide']['tidal_range_m']}m ({region_data['tide']['cycle']})\n"
-                f"• **Optimal Slack Navigation Window**: {region_data['tide']['slack_window']}\n"
-                f"• **Harbor Sandbar Clearance**: {region_data['tide']['sandbar_clearance_m']}m draft clearance at lowest tide."
-            )
-
-        elif intent == "satellite":
-            body = (
-                f"🛰️ **Satellite Oceanography & Thermal PFZ Analysis ({reg_name_en})**:\n\n"
-                f"• **Chlorophyll-a Density**: **{chloro_val} mg/m³** ({region_data['satellite']['pfz_status']})\n"
-                f"• **Sea Surface Temperature (SST)**: **{sst_val}°C** (Anomaly: {region_data['satellite']['sst_anomaly']:+}°C)\n"
-                f"• **Plankton Bloom Status**: {region_data['satellite']['plankton_density']}\n"
-                f"• **Thermal Edge Convergence**: {region_data['satellite']['thermal_front']}\n"
-                f"• **Sensor Calibration**: {region_data['satellite']['sensor_source']}"
-            )
-
-        elif intent == "bathymetry":
-            body = (
-                f"🗺️ **Seabed Bathymetry & Continental Shelf Profile ({reg_name_en})**:\n\n"
-                f"• **Continental Shelf Width**: {region_data['bathymetry']['shelf_width_km']} km offshore\n"
-                f"• **Seabed Substrate**: {region_data['bathymetry']['seabed_type']}\n"
-                f"• **Depth Contours**:\n"
-                f"  - 10 km offshore: {region_data['bathymetry']['depth_10km']}\n"
-                f"  - 25 km offshore: {region_data['bathymetry']['depth_25km']}\n"
-                f"  - 50 km offshore: {region_data['bathymetry']['depth_50km']}\n"
-                f"  - Shelf Break: {region_data['bathymetry']['depth_shelf_break']}"
-            )
-
-        elif intent == "gis":
-            zones_str = "\n".join([f"  • **{z['name']}**: {z['distance_km']} km away ({z['status']})" for z in region_data["gis"]["restricted_zones"]])
-            body = (
-                f"🌐 **Maritime Boundaries & Restricted Zones ({reg_name_en})**:\n\n"
-                f"• **Distance to International Boundary (IMBL)**: **{region_data['gis']['distance_to_imbl']} km**\n"
-                f"• **IMBL Security Status**: {region_data['gis']['imbl_status']}\n\n"
-                f"**Nearby Restricted Maritime Zones**:\n{zones_str}"
-            )
-
-        elif intent == "community":
-            if len(region_reports) > 0:
-                rep_list_str = "\n".join([f"  • [{r['timestamp']}] ({r['type']}): \"{r['text']}\"" for r in region_reports])
-                body = f"👥 **Community Fishermen Logs & Crowd Reports ({reg_name_en})**:\n\n{rep_list_str}"
-            else:
-                body = f"👥 **Community Fishermen Logs**: No recent reports filed for {reg_name_en} in the last 12 hours."
-
-        elif intent == "timing":
-            body = (
-                f"⏰ **Optimal Departure & Fishing Timing for {reg_name_en}**:\n\n"
-                f"• **Best Catch Window**: **{species_info.get('catch_window', 'Early Morning 05:00 - 09:30 AM')}** (Peak feeding during high tide influx)\n"
-                f"• **Tidal Slack for Harbor Departure**: {region_data['tide']['slack_window']}\n"
-                f"• **Marine State**: Swells {wave_val}m | Winds {wind_val} knots ({region_data['weather']['wind_direction']})\n"
-                f"• **Target Species**: {', '.join(species_info.get('primary', []))}"
-            )
-
-        elif intent == "safety":
-            safety_verdict = "Yes, it is SAFE to proceed to sea today." if danger_level == "SAFE" else "CAUTION is advised before venturing into sea today." if danger_level == "CAUTION" else "NO, it is DANGEROUS to go to sea today due to severe marine hazards."
-            body = (
-                f"🛡️ **Multi-Agent Sea Venture Safety Verdict**:\n\n"
-                f"**{safety_verdict}**\n\n"
-                f"• **Composite Danger Score**: **{total_risk}/100** ({danger_level})\n"
-                f"• **Wave Swell**: {wave_val}m ({region_data['ocean']['sea_state']})\n"
-                f"• **Wind & Gusts**: {wind_val} kts ({wind_kmh} km/h) | Gusts: {region_data['weather']['wind_gusts']} kts\n"
-                f"• **Atmosphere**: {region_data['weather']['condition']} | Barometer: {region_data['weather']['barometric_pressure']} hPa\n"
-                f"• **Security**: {region_data['gis']['distance_to_imbl']} km from IMBL"
-            )
-
-        else: # fish_general or general
-            species_list_en = ", ".join(species_info.get("primary", ["Indian Mackerel", "Sardines"]))
-            body = (
-                f"🛰️ **Marine Intelligence Overview ({reg_name_en})**:\n\n"
-                f"• **Potential Fishing Zone (PFZ)**: {region_data['satellite']['pfz_status']} with Chlorophyll at **{chloro_val} mg/m³** and SST at **{sst_val}°C**.\n"
-                f"• **Primary Species**: {species_list_en}\n"
-                f"• **Recommended Gear & Depth**: {species_info.get('gear', 'Pelagic Drift Nets')} ({species_info.get('depth_range', '15-45m')})\n"
-                f"• **Tide Timings**: High Tide at {region_data['tide']['high_tide_1']}, Low Tide at {region_data['tide']['low_tide_1']}\n"
-                f"• **Safety Rating**: **{danger_level}** (Threat score: {total_risk}/100, Wind: {wind_val} kts, Waves: {wave_val}m)"
-            )
-            
-        final_answer = f"{intro}\n\n{body}"
-
-    elif lang == "hi":
-        time_prefix_hi = f"{time_ctx['hi']} के लिए " if time_ctx["hi"] else ""
-        intro = f"{time_prefix_hi}{reg_name_hi} की स्थिति रिपोर्ट:"
-        
-        if intent == "trip_advisory":
-            if total_risk < 40:
-                verdict_banner = "✅ **हाँ, कल मछली पकड़ने जाने के लिए मौसम और समुद्र अनुकूल है।**"
-                verdict_sub = "हवा, लहरें और मौसमी परिस्थितियाँ पूरी तरह सुरक्षित सीमा के भीतर हैं।"
-            elif total_risk < 70:
-                verdict_banner = "⚠️ **सावधानी बरतें — केवल तटीय क्षेत्र में ही मछली पकड़ें।**"
-                verdict_sub = "तट के पास स्थिति सामान्य है, परंतु गहरे समुद्र में तेज लहरों और हवा के झोंके का जोखिम है।"
-            else:
-                verdict_banner = "❌ **नहीं, कल समुद्र में मछली पकड़ने जाना असुरक्षित व खतरनाक है।**"
-                verdict_sub = "समुद्र में ऊंची तूफानी लहरों और तेज हवाओं की चेतावनी जारी है।"
-
-            body = (
-                f"{verdict_banner}\n{verdict_sub}\n\n"
-                f"📊 **{reg_name_hi} हेतु विस्तृत मौसमी व सागरीय विश्लेषण**:\n\n"
-                f"१. 🌤️ **मौसम व हवा की स्थिति**:\n"
-                f"   • **हवा की गति**: **{wind_val} नॉट ({wind_kmh} किमी/घंटा)** दिशा: {region_data['weather']['wind_direction']}\n"
-                f"   • **तेज हवा के झोंके**: अधिकतम **{region_data['weather']['wind_gusts']} नॉट**\n"
-                f"   • **वायुदाब (Barometer)**: **{region_data['weather']['barometric_pressure']} hPa** ({region_data['weather']['pressure_trend']})\n"
-                f"   • **बारिश की संभावना**: {region_data['weather']['precipitation']}% ({cond_hi})\n\n"
-                f"२. 🌊 **लहरों की ऊंचाई व समुद्र की स्थिति**:\n"
-                f"   • **लहरों की ऊंचाई**: **{wave_val} मीटर** (लगभग {wave_ft} फीट)\n"
-                f"   • **उफान अवधि व दिशा**: **{region_data['ocean']['swell_period']} सेकंड** ({region_data['ocean']['swell_direction']} से)\n"
-                f"   • **समुद्र का स्वरूप**: **{region_data['ocean'].get('sea_state_hi', region_data['ocean']['sea_state'])}**\n"
-                f"   • **सागरीय प्रवाह**: {region_data['ocean']['current_speed']} नॉट ({region_data['ocean']['current_direction']})\n\n"
-                f"३. ⏳ **नाव प्रस्थान व वापसी का सबसे अनुकूल समय**:\n"
-                f"   • **उच्च ज्वार (High Tide)**: {region_data['tide']['high_tide_1']} | **निम्न ज्वार (Low Tide)**: {region_data['tide']['low_tide_1']}\n"
-                f"   • **शांत जल प्रस्थान समय (Slack Water)**: **{region_data['tide'].get('slack_window_hi', region_data['tide']['slack_window'])}**\n"
-                f"   • **सैंडबार पानी की गहराई**: {region_data['tide']['sandbar_clearance_m']} मीटर सुरक्षित गहराई\n\n"
-                f"४. 📋 **अनिवार्य सुरक्षा चेकलिस्ट**:\n"
-                f"   • जेटी से निकलने से पहले सभी सदस्य लाइफ जैकेट अवश्य पहनें।\n"
-                f"   • VHF मरीन रेडियो को चालू रखें और **चैनल 16 (156.800 MHz)** पर सुनें।\n"
-                f"   • नाव में अतिरिक्त ईंधन, बैटरी और 48 घंटे का पीने का पानी रखें।\n"
-                f"   • अपनी प्रस्थान दिशा और संभावित वापसी का समय बंदरगाह कार्यालय अथवा परिवार को सूचित करें।"
-            )
-
-        elif intent == "species_profile":
-            sp_key = target_species if target_species else "tuna"
-            prof = species_profiles.get(sp_key) or GLOBAL_SPECIES_PROFILES.get(sp_key) or GLOBAL_SPECIES_PROFILES["tuna"]
-            
-            body = (
-                f"🐟 **लक्षित मछली संपूर्ण गाइड: {prof.get('name_hi', prof.get('name', 'मछली'))}** (*{prof.get('scientific', '')}*)\n\n"
-                f"📍 **१. शिकार का सबसे अच्छा स्थान व दूरी**:\n"
-                f"   • **हॉटस्पॉट क्षेत्र**: {prof.get('hotspot', 'तट से 25-60 किमी दूर महाद्वीपीय शेल्फ ढलान')}\n"
-                f"   • **सागरीय संकेत**: थर्मल फ्रंट सीमा (गर्म और ठंडे पानी का संगम) और उच्च क्लोरोफिल वाले अपवेलिंग क्षेत्र में जाएं।\n\n"
-                f"📏 **२. शिकार की सही गहराई (Depth)**:\n"
-                f"   • **गहराई स्तर**: **{prof.get('depth_hi', prof.get('depth', '30 - 80 मीटर'))}**\n"
-                f"   • **व्यवहार**: टूना व बड़ी पेलाजिक मछलियां दिन में 30 से 80 मीटर गहराई में तैरती हैं और सुबह-शाम सतह पर शिकार करने आती हैं।\n\n"
-                f"🪱 **३. सर्वोत्तम चारा, ल्यूर व गियर (Bait & Gear)**:\n"
-                f"   • **उत्कृष्ट चारा**: {prof.get('bait_hi', prof.get('bait', 'जीवित बांगड़ा, ताजी सार्डिन, स्क्विड के टुकड़े व सिल्वर चम्मच ल्यूर'))}\n"
-                f"   • **अनुशंसित जाल व गियर**: {prof.get('gear_hi', prof.get('gear', 'पेलाजिक लॉन्गलाइन, ट्रोलिंग लाइन्स व भारी ड्रिफ्ट जाल'))}\n"
-                f"   • **कांटा व लीडर सलाह**: टूना के तेज दांतों से बचने हेतु मजबूत स्टील वायर लीडर और बड़े सर्कल हुक (#8/0 से #10/0) का उपयोग करें।\n\n"
-                f"🌤️ **४. अनुकूल मौसम व समुद्री परिस्थितियाँ**:\n"
-                f"   • **अनुकूल सागरीय तापमान**: **{prof.get('temp_opt', '27.0°C - 29.5°C')}** (वर्तमान में {reg_name_hi} का तापमान: {sst_val}°C)\n"
-                f"   • **मौसम व समुद्र स्थिति**: {prof.get('weather_conditions_hi', 'साफ धूप, हल्की हवा (<14 नॉट), हल्की सतही लहरें')}\n"
-                f"   • **प्राकृतिक संकेत**: समुद्र में गोता लगाते समुद्री पक्षियों या पानी में उछलती छोटी मछलियों के झुंड को देखें।\n\n"
-                f"💰 **५. बाजार भाव व ताजेपन का संरक्षण**:\n"
-                f"   • **अनुमानित नीलामी दर**: **{prof.get('market_price_hi', prof.get('market_price', '₹350 - ₹580 प्रति किग्रा'))}**\n"
-                f"   • **बर्फ संरक्षण**: मछली को पकड़ते ही रक्तस्राव करें और ताजेपन हेतु 1:1 के अनुपात में बर्फ के घोल में रखें।"
-            )
-
-        elif intent == "small_boat_safety":
-            body = (
-                f"🛡️ **छोटी नाव सुरक्षा विश्लेषण (हवा की गति: 25 किमी/घंटा / 13.5 नॉट)**:\n\n"
-                f"⚠️ **सीधा निष्कर्ष: सावधानी — 25 किमी/घंटा हवा में छोटी नाव लेकर गहरे समुद्र में न जाएं।**\n\n"
-                f"**छोटी नावों के लिए 25 किमी/घंटा हवा खतरनाक क्यों है (सरल भाषा में)**:\n\n"
-                f"१. 🌊 **ऊंची व तीखी लहरों का निर्माण**:\n"
-                f"   • **25 किमी/घंटा (13.5 नॉट / ब्यूफोर्ट स्केल 4)** की हवा से समुद्र में **1.2 से 1.8 मीटर** ऊंची तीव्र लहरें और सफेद झागदार लहरें बनती हैं।\n"
-                f"   • बड़े ट्रॉलरों के लिए यह सामान्य है, परंतु **छोटी फाइबर (FRP) या लकड़ी की नावों (28-30 फीट से छोटी)** की दीवारें कम ऊंची होती हैं, जिससे लहरों का पानी डेक पर तेजी से भरता है।\n\n"
-                f"२. ⚠️ **नाव पलटने व असंतुलन का जोखिम**:\n"
-                f"   • छोटी नाव में भारी जाल खींचते समय या लहरों के आड़े (side-on) मुड़ते समय नाव के अत्यधिक डोलने या पलटने का गंभीर खतरा होता है।\n"
-                f"   • लहरों के थपेड़ों से इंजन पर दबाव पड़ता है और दिशा नियंत्रित करना कठिन हो जाता है।\n\n"
-                f"📍 **छोटी नाव वाले मछुआरों के लिए सुरक्षित नियम**:\n\n"
-                f"• **तट के पास रहें**: केवल तटीय सुरक्षित क्षेत्र (तट से **3 से 5 नॉटिकल मील / 5 से 8 किमी के भीतर**) ही मासेमारी करें। गहरे समुद्र (15-40 किमी दूर) में बिल्कुल न जाएं।\n"
-                f"• **वजन संतुलित रखें**: जाल, बर्फ की पेटी और चालक दल का भार नाव के बीचों-बीच रखें ताकि नाव एक तरफ न झुके।\n"
-                f"• **लहरों का सामना**: लहरों को 45 डिग्री के कोण पर पार करें; लहरों के समानांतर कभी न घूमें।\n"
-                f"• **सुरक्षा उपकरण**: सभी सदस्य अनिवार्य रूप से लाइफ जैकेट पहनें और पानी निकालने की बाल्टी/पंप तैयार रखें।\n"
-                f"• **तुरंत वापसी का नियम**: यदि हवा की गति **30 किमी/घंटा** से ऊपर जाए या काले बादल दिखें, तो बिना देरी किए तुरंत तट पर लौटें।"
-            )
-
-        elif intent == "pfz_discrepancy":
-            body = (
-                f"🔍 **भविष्यवाणी किया गया मत्स्य क्षेत्र (PFZ) वास्तविक मछली मिलने की जगह से अलग क्यों हो सकता है?**:\n\n"
-                f"मछुआरों को अक्सर उपग्रह द्वारा बताए गए सटीक बिंदु से कुछ किलोमीटर दूर मछलियां मिलती हैं। इसके **5 मुख्य वैज्ञानिक और व्यावहारिक कारण सरल भाषा में** निम्नलिखित हैं:\n\n"
-                f"१. 🛰️ **उपग्रह डेटा में 12 से 24 घंटे का समय-अंतर (Time Lag)**:\n"
-                f"   • उपग्रह (जैसे ISRO Oceansat-3) दिन में केवल 1 या 2 बार परिक्रमा करते हुए समुद्र की तस्वीर लेते हैं।\n"
-                f"   • उपग्रह की तस्वीर लेने और आपकी नाव के वहाँ पहुँचने के बीच के **12 से 24 घंटों में सागरीय धाराएँ और ज्वार का बहाव (0.5 से 1.5 नॉट की गति से)** उस पूरे पानी के समूह को **5 से 15 किलोमीटर आगे** बहा ले जाता है।\n\n"
-                f"२. 🌊 **सतही तापमान बनाम गहरी जल परतें (Thermoclines)**:\n"
-                f"   • उपग्रह कैमरे केवल समुद्र की सबसे ऊपरी **1 से 2 मिलीमीटर पतली परत** ('ओशन स्किन') का तापमान और रंग मापते हैं।\n"
-                f"   • जबकि पापलेट, टूना या घोल जैसी मछलियां **20 से 60 मीटर गहराई** पर ठंडे पानी में तैरती हैं, जहाँ का पानी सतह से अलग दिशा में बह सकता है।\n\n"
-                f"३. 🦐 **खाद्य श्रृंखला में गतिशीलता (प्लवक बनाम शिकारी मछलियां)**:\n"
-                f"   • उपग्रह क्लोरोफिल यह बताता है कि सूक्ष्म वनस्पति प्लवक (काई/प्लवक) कहाँ पनप रहे हैं।\n"
-                f"   • छोटी मछलियां (सार्डिन/एंकोवी) प्लवक खाने आती हैं और बड़ी शिकारी मछलियां (टूना, सुरमई) छोटी मछलियों के पीछे आती हैं।\n"
-                f"   • शिकारी मछलियां अक्सर मुख्य क्लोरोफिल के केंद्र में बैठने के बजाय भोजन का पीछा करते हुए **5 से 10 किमी आगे** निकल जाती हैं।\n\n"
-                f"४. 🚤 **नावों का शोर और मासेमारी का दबाव**:\n"
-                f"   • जब बहुत सी नावें एक ही बताए गए PFZ बिंदु पर पहुँचती हैं, तो इंजनों की गड़गड़ाहट और प्रोपेलर के शोर से मछलियों के झुंड डरकर आसपास की शांत खाइयों में चले जाते हैं।\n\n"
-                f"५. ☁️ **मानसून में बादलों का अवरोध**:\n"
-                f"   • घने बादलों के कारण उपग्रह कैमरे समुद्र की सतह को साफ नहीं देख पाते, जिससे पूर्वानुमान मॉडल को अनुमानित गणित का उपयोग करना पड़ता है।"
-            )
-
-        elif intent == "pfz_explanation":
-            body = (
-                f"🧠 **मल्टी-एजेंट स्पष्टीकरण: INNOWAVE ने इस मत्स्य क्षेत्र की सिफारिश क्यों की?**:\n\n"
-                f"INNOWAVE प्रणाली उपग्रह विज्ञान, समुद्री जीवविज्ञान, हाइड्रोडायनामिक्स और सुरक्षा नियमों का विश्लेषण करके इस क्षेत्र की सिफारिश करती है। इसका चरणबद्ध कारण निम्न है:\n\n"
-                f"१. 🌿 **प्रचुर भोजन व उच्च क्लोरोफिल स्तर (Satellite Ocean Color)**:\n"
-                f"   • ISRO Oceansat-3 उपग्रह द्वारा यहाँ क्लोरोफिल की मात्रा **{chloro_val} मि.ग्रा./घन मीटर** मापी गई है।\n"
-                f"   • उच्च क्लोरोफिल स्तर यह सुनिश्चित करता है कि यहाँ सूक्ष्म डायटम प्लवक का भारी भंडार है, जो सार्डिन, बांगड़ा और एंकोवी जैसी मछलियों को आकर्षित करता है।\n\n"
-                f"२. 🌡️ **थर्मल फ्रंट व अपवेलिंग (ठंडे और गर्म पानी का संगम)**:\n"
-                f"   • उपग्रह तापमान सेंसर ने यहाँ **{sst_val}°C की थर्मल फ्रंट सीमा** पाई है।\n"
-                f"   • जब समुद्र तल का ठंडा पानी सतह के गर्म पानी से मिलता है (Upwelling), तो समुद्र के तलछट के पोषक खनिज सतह पर आते हैं, जिससे यह प्राकृतिक भोजन क्षेत्र बन जाता है।\n\n"
-                f"३. 🗺️ **महाद्वीपीय शेल्फ गहराई की अनुकूल बनावट (Bathymetry)**:\n"
-                f"   • यह क्षेत्र **{region_data['bathymetry']['shelf_width_km']} किमी चौड़े शेल्फ ढलान** (25 से 60 मीटर गहराई) पर स्थित है।\n"
-                f"   • समुद्र तल की प्राकृतिक चट्टानें मछलियों के झुंड को खुले गहरे महासागर में बिखरने से रोकती हैं।\n\n"
-                f"४. 🛡️ **मौसम व समुद्री सुरक्षा का पूर्ण सत्यापन**:\n"
-                f"   • मौसम जांच: हवा की गति **{wind_val} नॉट ({wind_kmh} किमी/घंटा)** और लहरें **{wave_val} मीटर** हैं, जो पूरी तरह सुरक्षित हैं।\n"
-                f"   • सुरक्षा जांच: यह क्षेत्र **अंतर्राष्ट्रीय सीमा (IMBL) से {region_data['gis']['distance_to_imbl']} किमी दूर भारतीय क्षेत्र में** है और नौसेना प्रतिबंधित क्षेत्रों से पूरी तरह मुक्त है।\n\n"
-                f"५. 👥 **स्थानीय मछुआरा समुदाय व CMFRI रिकॉर्ड द्वारा सत्यापन**:\n"
-                f"   • CMFRI के मौसमी रिकॉर्ड और हालिया स्थानीय बंदरगाह रिपोर्टों द्वारा इस क्षेत्र में अच्छी मासेमारी की पुष्टि की गई है।"
-            )
-
-        elif intent == "gear":
-            body = (
-                f"🎣 **{reg_name_hi} हेतु अनुशंसित जाल व गियर विवरण**:\n\n"
-                f"• **अनुशंसित मुख्य गियर**: {species_info.get('gear_hi', 'पेलाजिक ड्रिफ्ट नेट व गिलनेट')}\n"
-                f"• **परिचालन गहराई**: {species_info.get('depth_range_hi', '15 - 45 मीटर')}\n"
-                f"• **लक्षित मछलियाँ**: {', '.join(species_info.get('primary_hi', []))}\n"
-                f"• **मेश साइज दिशा-निर्देश**: छोटी मछलियों के संरक्षण हेतु न्यूनतम मेश आकार (25 मिमी से 140 मिमी तक) का पालन करें।\n"
-                f"• **जाल लगाने की सलाह**: वर्तमान सागरी प्रवाह {region_data['ocean']['current_speed']} समुद्री मील है — जाल को ज्वारीय प्रवाह के लंबवत लगाएं।"
-            )
-
-        elif intent == "market":
-            prices_str = "\n".join([f"  • **{k}**: {v}" for k, v in region_data["economics"]["dockside_prices"].items()])
-            body = (
-                f"💰 **मत्स्य बाजार भाव व आर्थिक जानकारी ({reg_name_hi})**:\n\n"
-                f"**वर्तमान अनुमानित नीलामी दरें (प्रति किग्रा)**:\n{prices_str}\n\n"
-                f"⛽ **ईंधन बचत सलाह**: {region_data['economics'].get('fuel_saving_tips_hi', region_data['economics']['fuel_saving_tips'])}\n"
-                f"🧊 **बर्फ अनुपात**: ताजे माल हेतु 1:1 का अनुपात रखें।"
-            )
-
-        elif intent == "emergency":
-            checklist_str = "\n".join([f"  ✅ {item}" for item in region_data["emergency"].get("mandatory_checklist_hi", region_data["emergency"]["mandatory_checklist"])])
-            body = (
-                f"🚨 **आपातकालीन हेल्पलाइन व समुद्री सुरक्षा प्रोटोकॉल ({reg_name_hi})**:\n\n"
-                f"• 📞 **भारतीय तटरक्षक बल (ICG 24x7 हेल्पलाइन)**: **{region_data['emergency']['coast_guard_helpline']}**\n"
-                f"• 📻 **अंतर्राष्ट्रीय आपातकालीन रेडियो फ्रीक्वेंसी**: **{region_data['emergency']['mrcc_frequency']}**\n"
-                f"• 👮 **तटीय मरीन पुलिस**: **{region_data['emergency']['coastal_police']}**\n\n"
-                f"**समुद्र में जाने से पूर्व अनिवार्य सुरक्षा चेकलिस्ट**:\n{checklist_str}"
-            )
-
-        elif intent == "wave":
-            body = (
-                f"🌊 **सागरी लहरों व जल-प्रवाह की स्थिति ({reg_name_hi})**:\n\n"
-                f"• **लहरों की ऊंचाई**: **{wave_val} मीटर** ({wave_ft} फीट)\n"
-                f"• **उफान अवधि व दिशा**: **{region_data['ocean']['swell_period']} सेकंड** ({region_data['ocean']['swell_direction']} से)\n"
-                f"• **सतही प्रवाह गति**: **{region_data['ocean']['current_speed']} समुद्री मील** ({region_data['ocean']['current_direction']})\n"
-                f"• **समुद्र की स्थिति**: **{region_data['ocean'].get('sea_state_hi', region_data['ocean']['sea_state'])}**\n"
-                f"• **जल-दृश्यता व तापमान**: {region_data['ocean']['underwater_visibility_m']} मीटर | सतही तापमान: {sst_val}°C"
-            )
-
-        elif intent == "weather":
-            body = (
-                f"🌤️ **वायुमंडलीय व मौसम स्थिति ({reg_name_hi})**:\n\n"
-                f"• **हवा की गति**: **{wind_val} समुद्री मील ({wind_kmh} किमी/घंटा)** दिशा: {region_data['weather']['wind_direction']}\n"
-                f"• **तेज हवाओं के झोंके**: **{region_data['weather']['wind_gusts']} समुद्री मील**\n"
-                f"• **वायुदाब (Barometer)**: **{region_data['weather']['barometric_pressure']} hPa** ({region_data['weather']['pressure_trend']})\n"
-                f"• **बारिश की संभावना**: {region_data['weather']['precipitation']}%\n"
-                f"• **तापमान व आर्द्रता**: {region_data['weather']['air_temperature']}°C | आर्द्रता: {region_data['weather']['humidity']}%\n"
-                f"• **दृश्यता**: {region_data['weather']['visibility_nm']} नॉटिकल मील ({cond_hi})"
-            )
-
-        elif intent == "storm":
-            if has_storm_warning:
-                warn_hi = ", ".join(region_data["weather"].get("warnings_hi", ["तेज समुद्री आंधी अलर्ट"]))
+            elif intent == "danger_index_explanation":
                 body = (
-                    f"⚠️ **तूफान व चक्रवात चेतावनी**: {reg_name_hi} में मौसम विभाग द्वारा चेतावनी जारी है ({warn_hi})!\n\n"
-                    f"• हवा की गति: **{wind_val} समुद्री मील ({wind_kmh} किमी/घंटा)** झोंके: **{region_data['weather']['wind_gusts']} नॉट**\n"
-                    f"• लहरों की ऊंचाई: **{wave_val} मीटर** ({region_data['ocean'].get('sea_state_hi', region_data['ocean']['sea_state'])})\n"
-                    f"• वायुदाब: **{region_data['weather']['barometric_pressure']} hPa**\n"
-                    f"🛡️ **चेतावनी**: मछुआरों को समुद्र में जाने से सख्त मना किया जाता है। तुरंत सुरक्षित तट पर लौटें।"
-                )
-            else:
-                body = (
-                    f"✅ **तूफान का कोई अलर्ट नहीं**: वर्तमान में {reg_name_hi} क्षेत्र में तूफान अथवा चक्रवात का कोई खतरा नहीं है।\n\n"
-                    f"• मौसम स्थिति: {cond_hi}\n"
-                    f"• हवा: {wind_val} नॉट | लहरें: {wave_val} मीटर | वायुदाब: {region_data['weather']['barometric_pressure']} hPa (स्थिर)"
+                    f"🧠 **COMPOSITE DANGER INDEX EXPLANATION: {total_risk}/100 ({danger_level} RISK)**\n\n"
+                    f"The current marine danger index for **{reg_name_en}** is computed at **{total_risk}/100** by combining real-time atmospheric, hydrodynamic, geospatial, and community threat scores:\n\n"
+                    f"1. 💨 **Wind Threat Component ({round(wind_risk, 1)} / 35 pts)**: Based on sustained winds of **{wind_val} knots ({wind_kmh} km/h)** and gusts up to **{region_data['weather']['wind_gusts']} knots**.\n"
+                    f"2. 🌊 **Wave & Swell Component ({round(wave_risk, 1)} / 35 pts)**: Derived from a significant wave height of **{wave_val} meters** and an **{region_data['ocean']['swell_period']}-second swell period** ({region_data['ocean']['sea_state']}).\n"
+                    f"3. 🌐 **Geospatial & Boundary Risk ({round(gis_risk, 1)} / 30 pts)**: Operating **{region_data['gis']['distance_to_imbl']} km from the IMBL** and clear of the {region_data['gis']['restricted_zones'][0]['name']} boundary.\n"
+                    f"4. 👥 **Community Report Modifier ({community_risk_mod:+d} pts)**: Adjusted based on {len(region_reports)} verified harbor logs and active weather warnings.\n\n"
+                    f"**Summary**: At {total_risk}/100, the overall operational risk remains **{danger_level}**, allowing standard commercial fishing crafts to operate with normal maritime vigilance."
                 )
 
-        elif intent == "tide":
-            body = (
-                f"⏳ **ज्वार-भाटा का समय व नौकायन विंडो ({reg_name_hi})**:\n\n"
-                f"• 🔺 **पहला उच्च ज्वार (High Tide)**: {region_data['tide']['high_tide_1']}\n"
-                f"• 🔻 **पहला निम्न ज्वार (Low Tide)**: {region_data['tide']['low_tide_1']}\n"
-                f"• 🔺 **दूसरा उच्च ज्वार**: {region_data['tide']['high_tide_2']}\n"
-                f"• 🔻 **दूसरा निम्न ज्वार**: {region_data['tide']['low_tide_2']}\n\n"
-                f"• **ज्वारीय सीमा व चक्र**: {region_data['tide']['tidal_range_m']} मीटर ({region_data['tide'].get('cycle_hi', region_data['tide']['cycle'])})\n"
-                f"• **शांत जल प्रस्थान विंडो (Slack Water)**: {region_data['tide'].get('slack_window_hi', region_data['tide']['slack_window'])}\n"
-                f"• **सैंडबार क्लीयरेंस**: निम्नतम ज्वार पर भी {region_data['tide']['sandbar_clearance_m']} मीटर जल गहराई उपलब्ध।"
-            )
-
-        elif intent == "satellite":
-            body = (
-                f"🛰️ **उपग्रह क्लोरोफिल व PFZ थर्मल विश्लेषण ({reg_name_hi})**:\n\n"
-                f"• **क्लोरोफिल घनत्व**: **{chloro_val} मि.ग्रा./घन मीटर** ({region_data['satellite'].get('pfz_status_hi', region_data['satellite']['pfz_status'])})\n"
-                f"• **समुद्री सतह का तापमान (SST)**: **{sst_val}°C** (विसंगति: {region_data['satellite']['sst_anomaly']:+}°C)\n"
-                f"• **प्लवक (Plankton) सक्रियता**: {region_data['satellite']['plankton_density']}\n"
-                f"• **थर्मल फ्रंट सीमा**: {region_data['satellite']['thermal_front']}\n"
-                f"• **उपग्रह सेंसर स्रोत**: {region_data['satellite']['sensor_source']}"
-            )
-
-        elif intent == "bathymetry":
-            body = (
-                f"🗺️ **समुद्र तल व महाद्वीपीय शेल्फ गहराई ({reg_name_hi})**:\n\n"
-                f"• **शेल्फ चौड़ाई**: तट से {region_data['bathymetry']['shelf_width_km']} किमी तक\n"
-                f"• **समुद्र तल की बनावट**: {region_data['bathymetry'].get('seabed_type_hi', region_data['bathymetry']['seabed_type'])}\n"
-                f"• **गहराई समोच्च (Contours)**:\n"
-                f"  - 10 किमी दूर: {region_data['bathymetry']['depth_10km']}\n"
-                f"  - 25 किमी दूर: {region_data['bathymetry']['depth_25km']}\n"
-                f"  - 50 किमी दूर: {region_data['bathymetry']['depth_50km']}\n"
-                f"  - शेल्फ ब्रेक: {region_data['bathymetry']['depth_shelf_break']}"
-            )
-
-        elif intent == "gis":
-            zones_str = "\n".join([f"  • **{z.get('name_hi', z['name'])}**: {z['distance_km']} किमी दूर ({z.get('status_hi', z['status'])})" for z in region_data["gis"]["restricted_zones"]])
-            body = (
-                f"🌐 **अंतर्राष्ट्रीय सीमा व प्रतिबंधित क्षेत्र ({reg_name_hi})**:\n\n"
-                f"• **अंतर्राष्ट्रीय समुद्री सीमा (IMBL) से दूरी**: **{region_data['gis']['distance_to_imbl']} किमी**\n"
-                f"• **सीमा सुरक्षा स्थिति**: {region_data['gis'].get('imbl_status_hi', region_data['gis']['imbl_status'])}\n\n"
-                f"**निकटवर्ती प्रतिबंधित समुद्री क्षेत्र**:\n{zones_str}"
-            )
-
-        elif intent == "community":
-            if len(region_reports) > 0:
-                rep_list_str = "\n".join([f"  • [{r.get('timestamp_hi', r['timestamp'])}] ({r.get('type_hi', r['type'])}): \"{r.get('text_hi', r['text'])}\"" for r in region_reports])
-                body = f"👥 **स्थानीय मछुआरा समुदाय रिपोर्ट ({reg_name_hi})**:\n\n{rep_list_str}"
-            else:
-                body = f"👥 **स्थानीय मछुआरा रिपोर्ट**: {reg_name_hi} क्षेत्र में पिछले 12 घंटों में कोई नई रिपोर्ट दर्ज नहीं हुई।"
-
-        elif intent == "timing":
-            body = (
-                f"⏰ **मछली पकड़ने और नौका प्रस्थान का सर्वोत्तम समय ({reg_name_hi})**:\n\n"
-                f"• **सर्वोत्तम शिकार समय**: **{species_info.get('catch_window_hi', 'सुबह 05:00 से 09:30 बजे तक')}** (ज्वार के समय मछलियों की अधिक सक्रियता)\n"
-                f"• **नौका प्रस्थान का शांत समय**: {region_data['tide'].get('slack_window_hi', region_data['tide']['slack_window'])}\n"
-                f"• **सागरीय स्थिति**: लहरें {wave_val} मीटर | हवा {wind_val} नॉट ({region_data['weather']['wind_direction']})\n"
-                f"• **संभावित मछलियाँ**: {', '.join(species_info.get('primary_hi', []))}"
-            )
-
-        elif intent == "safety":
-            safety_verdict = "हाँ, आज समुद्र में जाना पूर्णतः सुरक्षित है।" if danger_level == "SAFE" else "आज समुद्र में जाने के लिए सावधानी आवश्यक है।" if danger_level == "CAUTION" else "नहीं, आज समुद्र में जाना खतरनाक व असुरक्षित है।"
-            body = (
-                f"🛡️ **सुरक्षा निर्णय व खतरा विश्लेषण**:\n\n"
-                f"**{safety_verdict}**\n\n"
-                f"• **सुरक्षा स्थिति**: **{danger_hi}** (जोखिम स्तर: {total_risk}/100)\n"
-                f"• **लहरों की ऊंचाई**: {wave_val} मीटर ({region_data['ocean'].get('sea_state_hi', region_data['ocean']['sea_state'])})\n"
-                f"• **हवा की गति व झोंके**: {wind_val} नॉट ({wind_kmh} किमी/घंटा) | झोंके: {region_data['weather']['wind_gusts']} नॉट\n"
-                f"• **मौसम**: {cond_hi} | वायुदाब: {region_data['weather']['barometric_pressure']} hPa\n"
-                f"• **सीमा दूरी**: IMBL से {region_data['gis']['distance_to_imbl']} किमी दूर"
-            )
-
-        else: # fish_general or general
-            species_list_hi = ", ".join(species_info.get("primary_hi", ["बांगड़ा (मैकेरल)", "सिल्वर पापलेट", "बम्बिल", "तारली"]))
-            body = (
-                f"🛰️ **मत्स्य व सागरीय सूचना रिपोर्ट ({reg_name_hi})**:\n\n"
-                f"• **संभावित मत्स्य क्षेत्र (PFZ)**: {region_data['satellite'].get('pfz_status_hi', 'उच्च संभावित मत्स्य क्षेत्र')} (क्लोरोफिल: {chloro_val} मि.ग्रा., तापमान: {sst_val}°C)\n"
-                f"• **प्रमुख संभावित प्रजातियाँ**: {species_list_hi}\n"
-                f"• **अनुशंसित गियर व गहराई**: {species_info.get('gear_hi', 'पेलाजिक ड्रिफ्ट नेट')} ({species_info.get('depth_range_hi', '15-45 मीटर')})\n"
-                f"• **ज्वार समय**: उच्च ज्वार {region_data['tide']['high_tide_1']}, निम्न ज्वार {region_data['tide']['low_tide_1']}\n"
-                f"• **सुरक्षा रेटिंग**: **{danger_hi}** (जोखिम: {total_risk}/100, हवा: {wind_val} नॉट, लहरें: {wave_val} मीटर)"
-            )
-            
-        final_answer = f"{intro}\n\n{body}"
-
-    else:  # Marathi (mr)
-        time_prefix_mr = f"{time_ctx['mr']}च्या माहितीनुसार " if time_ctx["mr"] else ""
-        intro = f"{time_prefix_mr}{reg_name_mr} अहवाल:"
-        
-        if intent == "trip_advisory":
-            if total_risk < 40:
-                verdict_banner = "✅ **होय, उद्या मासेमारीसाठी समुद्रात जाण्यास परिस्थिती पूर्णपणे अनुकूल आहे.**"
-                verdict_sub = "हवामान, वाऱ्याचा वेग आणि लाटांची स्थिती सुरक्षित मर्यादेत आहे."
-            elif total_risk < 70:
-                verdict_banner = "⚠️ **सावधगिरी बाळगा — केवळ किनाऱ्यालगतच्या भागातच मासेमारी करा.**"
-                verdict_sub = "किनाऱ्याजवळ स्थिती सामान्य असली तरी खोल समुद्रात उसळणाऱ्या लाटा व वाऱ्याचे जोरदार झोत आहेत."
-            else:
-                verdict_banner = "❌ **नाही, उद्या मासेमारीसाठी समुद्रात जाणे अत्यंत धोकादायक व असुरक्षित आहे.**"
-                verdict_sub = "समुद्रात उंच उसळणाऱ्या लाटा आणि वेगवान वादळी वाऱ्यांचा इशारा देण्यात आला आहे."
-
-            body = (
-                f"{verdict_banner}\n{verdict_sub}\n\n"
-                f"📊 **{reg_name_mr} सविस्तर हवामान व सागरी स्थिती विश्लेषण**:\n\n"
-                f"१. 🌤️ **हवामान व वाऱ्याचा वेग**:\n"
-                f"   • **वाऱ्याचा वेग**: **{wind_val} नॉट्स ({wind_kmh} किमी/तास)** दिशा: {region_data['weather']['wind_direction']}\n"
-                f"   • **वाऱ्याचे जोरदार झोत**: कमाल **{region_data['weather']['wind_gusts']} नॉट्स**\n"
-                f"   • **हवेचा दाब (Barometer)**: **{region_data['weather']['barometric_pressure']} hPa** ({region_data['weather']['pressure_trend']})\n"
-                f"   • **पावसाची शक्यता**: {region_data['weather']['precipitation']}% ({cond_mr})\n\n"
-                f"२. 🌊 **लाटांची उंची व समुद्राचे स्वरूप**:\n"
-                f"   • **लाटांची उंची**: **{wave_val} मीटर** (सुमारे {wave_ft} फूट)\n"
-                f"   • **उसळीचा कालावधी व दिशा**: **{region_data['ocean']['swell_period']} सेकंद** ({region_data['ocean']['swell_direction']} कडून)\n"
-                f"   • **समुद्राची स्थिती**: **{region_data['ocean'].get('sea_state_mr', region_data['ocean']['sea_state'])}**\n"
-                f"   • **प्रवाहाचा वेग**: {region_data['ocean']['current_speed']} नॉट्स ({region_data['ocean']['current_direction']})\n\n"
-                f"३. ⏳ **बोट सोडण्याची व परतण्याची सर्वोत्तम वेळ**:\n"
-                f"   • **पहिली भरती (High Tide)**: {region_data['tide']['high_tide_1']} | **पहिली ओहोटी (Low Tide)**: {region_data['tide']['low_tide_1']}\n"
-                f"   • **शांत पाण्याचा कालावधी (Slack Water)**: **{region_data['tide'].get('slack_window_mr', region_data['tide']['slack_window'])}**\n"
-                f"   • **सँडबार पाण्याची खोली**: {region_data['tide']['sandbar_clearance_m']} मीटर सुरक्षित खोली\n\n"
-                f"४. 📋 **अनिवार्य सुरक्षा तपासणी सूची**:\n"
-                f"   • बंदरावरून निघण्यापूर्वी सर्व खलाशांनी ISI प्रमाणित लाईफ जॅकेट घालावे.\n"
-                f"   • VHF मरीन रेडिओ चालू ठेवून **चॅनेल १६ (156.800 MHz)** वर लक्ष ठेवावे.\n"
-                f"   • इंजिन बॅटरी, स्वच्छ डिझेल आणि ४८ तासांचे पिण्याचे पाणी सोबत ठेवावे.\n"
-                f"   • आपल्या बोटीची प्रस्थान दिशा व परतण्याची अंदाजे वेळ स्थानिक बंदर कार्यालयाला किंवा कुटुंबीयांना कळवावी."
-            )
-
-        elif intent == "species_profile":
-            sp_key = target_species if target_species else "tuna"
-            prof = species_profiles.get(sp_key) or GLOBAL_SPECIES_PROFILES.get(sp_key) or GLOBAL_SPECIES_PROFILES["tuna"]
-            
-            body = (
-                f"🐟 **माशांची संपूर्ण माहिती व मार्गदर्शक: {prof.get('name_mr', prof.get('name', 'मासा'))}** (*{prof.get('scientific', '')}*)\n\n"
-                f"📍 **१. सापडण्याचे मुख्य क्षेत्र व अंतर (Location & Hotspot)**:\n"
-                f"   • **हॉटस्पॉट क्षेत्र**: {prof.get('hotspot', 'किनाऱ्यापासून २५-६० किमी अंतरावर महाद्वीपीय शेल्फ कडा')}\n"
-                f"   • **सागरीय खूण**: समुद्रातील थर्मल फ्रंट सीमा (थंड व उबदार पाण्याचा संगम) आणि भरपूर क्लोरोफिल असलेल्या भागात मासेमारी करावी.\n\n"
-                f"📏 **२. मासेमारीची योग्य खोली (Target Depth)**:\n"
-                f"   • **सागरी खोली**: **{prof.get('depth_mr', prof.get('depth', '३० - ८० मीटर'))}**\n"
-                f"   • **माशांचे वर्तन**: टुना व मोठे पेलाजिक मासे दिवसा ३० ते ८० मीटर खोल पट्ट्यात विहार करतात आणि पहाटे-संध्याकाळी पृष्ठभागावर भक्ष्य पकडण्यास येतात.\n\n"
-                f"🪱 **३. शिफारस केलेले आमिष, गळ व जाळे (Bait & Gear)**:\n"
-                f"   • **उत्कृष्ट आमिष**: {prof.get('bait_mr', prof.get('bait', 'जिवंत बांगडा, ताज्या तारलीचे तुकडे, माकली आणि चमकदार चमचा ल्यूर'))}\n"
-                f"   • **योग्य जाळे व पद्धत**: {prof.get('gear_mr', prof.get('gear', 'पेलाजिक लाँगलाईन, ट्रोलिंग लाईन्स व मोठे ड्रिफ्ट जाळे'))}\n"
-                f"   • **गळ व वायर सल्ला**: टुनाच्या तीक्ष्ण दातांमुळे जाड स्टील वायर लीडर आणि मोठ्या आकाराच्या सर्कल गळांचा (#8/0 ते #10/0) वापर करावा.\n\n"
-                f"🌤️ **४. अनुकूल हवामान व समुद्राची परिस्थिती**:\n"
-                f"   • **अनुकूल सागरी तापमान**: **{prof.get('temp_opt', '27.0°C - 29.5°C')}** (सध्या {reg_name_mr}चे तापमान: {sst_val}°C)\n"
-                f"   • **हवामान व समुद्राचे स्वरूप**: {prof.get('weather_conditions_mr', 'निरभ्र स्वच्छ आकाश, मंद वारे (<१४ नॉट्स), समुद्रावर हलकी उसळी')}\n"
-                f"   • **नैसर्गिक खूण**: समुद्रावर गिरट्या घालणारे सागरी पक्षी किंवा पाण्यावर उसळणारे लहान माशांचे थवे शोधावेत.\n\n"
-                f"💰 **५. अंदाजे बाजारभाव व साठवणूक पद्धत**:\n"
-                f"   • **लिलाव बाजारभाव**: **{prof.get('market_price_mr', prof.get('market_price', '₹३५० - ₹५८० प्रति किलो'))}**\n"
-                f"   • **बर्फ साठवणूक**: मासा पकडल्याबरोबर स्वच्छ करून दर्जेदार निर्यातीसाठी १:१ प्रमाणात बर्फाच्या पाकात ठेवावा."
-            )
-
-        elif intent == "small_boat_safety":
-            body = (
-                f"🛡️ **लहान बोटींसाठी सागरी सुरक्षा विश्लेषण (वाऱ्याचा वेग: २५ किमी/तास / १३.५ नॉट्स)**:\n\n"
-                f"⚠️ **थेट निष्कर्ष: सावधगिरीचा इशारा — २५ किमी/तास वाऱ्यात लहान बोट घेऊन खोल समुद्रात जाणे टाळावे.**\n\n"
-                f"**लहान बोटींसाठी २५ किमी/तास वारा का धोकादायक ठरतो (साध्या भाषेत स्पष्टीकरण)**:\n\n"
-                f"१. 🌊 **उंच व उसळणाऱ्या लाटांची निर्मिती**:\n"
-                f"   • **२५ किमी/तास (१३.५ नॉट्स / ब्युफोर्ट स्केल ४)** वेगाच्या वाऱ्यामुळे समुद्रात **१.२ ते १.८ मीटर** उंच व तीक्ष्ण लाटा तयार होतात.\n"
-                f"   • मोठ्या ट्रॉलर्ससाठी ही परिस्थिती सामान्य असली, तरी **लहान फायबर (FRP) किंवा लाकडी बोटींची (२८-३० फुटांपेक्षा लहान)** बाजूची उंची कमी असल्यामुळे उसळणाऱ्या लाटांचे पाणी थेट डेकवर शिरते.\n\n"
-                f"२. ⚠️ **बोट उलटण्याचा व असंतुलित होण्याचा धोका**:\n"
-                f"   • लहान बोटीतून जाळे ओढताना किंवा लाटांच्या बाजूने बोट वळवताना बोट एका बाजूला कलंडून पाणी भरण्याचा किंवा उलटण्याचा मोठा धोका असतो.\n"
-                f"   • सततच्या लाटांच्या धडकांमुळे इंजिनवर ताण येतो व सुकाणू नियंत्रण कठीण होते.\n\n"
-                f"📍 **लहान बोटींच्या मच्छीमारांसाठी सुरक्षित मार्गदर्शक नियम**:\n\n"
-                f"• **किनाऱ्याजवळच राहा**: फक्त किनाऱ्यालगतच्या सुरक्षित भागातच मासेमारी करा (किनाऱ्यापासून **३ ते ५ सागरी मैल / ५ ते ८ किमी आत**). खोल समुद्रात (१५-४० किमी दूर) अजिबात जाऊ नका.\n"
-                f"• **वजन समतोल ठेवा**: जाळी, बर्फाची पेटी आणि खलाशांचे वजन बोटीच्या मध्यभागी ठेवा जेणेकरून बोट एका बाजूला झुकणार नाही.\n"
-                f"• **लाटांचा सामना**: लाटांना ४५ अंशाच्या कोनातून पार करा; लाटांच्या समांतर बोट कधीही फिरवू नका.\n"
-                f"• **सुरक्षा साधने**: सर्व खलाशांनी लाईफ जॅकेट घालावे आणि पाणी उपसण्याची बादली/पंप सज्ज ठेवावा.\n"
-                f"• **त्वरित परतण्याचा इशारा**: वाऱ्याचा वेग **३० किमी/तास** ओलांडल्यास किंवा आकाशात काळे वादळी ढग दिसल्यास त्वरित बंदराकडे परतावे."
-            )
-
-        elif intent == "pfz_discrepancy":
-            body = (
-                f"🔍 **अंदाजित मासेमारी क्षेत्र (PFZ) आणि प्रत्यक्षात मासे मिळण्याची जागा यात फरक का असू शकतो?**:\n\n"
-                f"उपग्रहाने दाखवलेल्या अचूक बिंदूपासून काही किलोमीटर अंतरावर मासे मिळणे अगदी स्वाभाविक आहे. याची **५ मुख्य वैज्ञानिक आणि व्यावहारिक कारणे साध्या भाषेत** खालीलप्रमाणे आहेत:\n\n"
-                f"१. 🛰️ **उपग्रह नोंदींमधील १२ ते २४ तासांचे अंतर (Satellite Time Lag)**:\n"
-                f"   • उपग्रह (जसे ISRO Oceansat-3) दिवसातून १ किंवा २ वेळा पृथ्वीभोवती फिरताना समुद्राची छायाचित्रे घेतात.\n"
-                f"   • उपग्रहाने फोटो काढल्यापासून ते आपली बोट त्या ठिकाणी पोहोचेपर्यंतच्या **१२ ते २४ तासांत समुद्राचे प्रवाह आणि भरती-ओहोटीचा वेग (०.५ ते १.५ नॉट्स)** त्या संपूर्ण पाण्याच्या थराला **५ ते १५ किलोमीटर पुढे** वाहून नेतो.\n\n"
-                f"२. 🌊 **पाण्याचा वरचा थर विरुद्ध खोल पाणी (Thermoclines)**:\n"
-                f"   • उपग्रह कॅमेरे समुद्राच्या केवळ सर्वात वरच्या **१ ते २ मिलिमीटर** थराचे तापमान आणि रंग तपासू शकतात.\n"
-                f"   • प्रत्यक्षात पापलेट, टुना, किंवा घोल यांसारखे मासे **२० ते ६० मीटर खोल** थंड पाण्याच्या थरात असतात, जिथे पाण्याचा प्रवाह पृष्ठभागापेक्षा वेगळा असू शकतो.\n\n"
-                f"३. 🦐 **अन्न साखळी आणि शिकारी माशांची हालचाल (Food Chain Drift)**:\n"
-                f"   • उपग्रहावर दिसणारे क्लोरोफिल म्हणजे वनस्पती प्लवक (सूक्ष्म शेवाळ).\n"
-                f"   • हे प्लवक खाण्यासाठी लहान मासे (तारली, नेतळी) येतात आणि लहान माशांच्या मागे टुना, सुरमई, पापलेट सारखे मोठे शिकारी मासे येतात.\n"
-                f"   • शिकारी मासे प्लवकच्या मूळ केंद्रावर न थांबता अन्नाचा पाठलाग करत प्रवाहाच्या दिशेने **५ ते १० किमी पुढे** सरकलेले असतात.\n\n"
-                f"४. 🚤 **बोटींचा आवाज आणि माशांचे विखुरणे**:\n"
-                f"   • एकाच PFZ पॉईंटवर अनेक बोटी आल्यावर इंजिनच्या आवाजाने व प्रोपेलरच्या कंपनांनी घाबरून माशांचे थवे जवळच्या शांत खंदकांमध्ये निघून जातात.\n\n"
-                f"५. ☁️ **ढगाळ हवामानाची मर्यादा**:\n"
-                f"   • पावसाळ्यात ढगांमुळे उपग्रह कॅमेऱ्यांना समुद्र स्वच्छ दिसत नाही, त्यामुळे अंदाजित गणिताचा आधार घेतला जातो, ज्यामुळे काही किलोमीटरचा फरक पडू शकतो."
-            )
-
-        elif intent == "pfz_explanation":
-            body = (
-                f"🧠 **मल्टी-एजंट स्पष्टीकरण: INNOWAVE ने हे मासेमारी क्षेत्र का निवडले किंवा शिफारस केली?**:\n\n"
-                f"INNOWAVE प्रणाली उपग्रह तंत्रज्ञान, सागरी जीवशास्त्र, पाण्याचे प्रवाह आणि सुरक्षितता नियमांचा अभ्यास करून या क्षेत्राची निवड करते. याची सविस्तर कारणे खालीलप्रमाणे आहेत:\n\n"
-                f"१. 🌿 **प्लवक व अन्नाची विपुलता (Satellite Ocean Color)**:\n"
-                f"   • ISRO Oceansat-3 उपग्रहाद्वारे या भागात क्लोरोफिलचे प्रमाण **{chloro_val} mg/m³** नोंदवले गेले आहे.\n"
-                f"   • उच्च क्लोरोफिल म्हणजे येथे डायटम प्लवकचे मोठे थवे आहेत, जे तारली, बांगडा व कोळंबीसारख्या माशांचे मुख्य अन्न आहे.\n\n"
-                f"२. 🌡️ **थर्मल फ्रंट व अपवेलिंग (थंड-उबदार पाण्याचा संगम)**:\n"
-                f"   • उपग्रह तापमान सेन्सर्सनी येथे **{sst_val}°C ची थर्मल फ्रंट सीमा** शोधली आहे.\n"
-                f"   • समुद्राच्या तळातील थंड पाणी जेव्हा वरच्या उबदार पाण्याला मिळते (Upwelling), तेव्हा तळातील पोषक द्रव्ये वर येतात व माशांचे मोठे थवे येथे आकर्षित होतात.\n\n"
-                f"३. 🗺️ **महाद्वीपीय शेल्फ व समुद्रतळाची अनुकूल रचना (Bathymetry)**:\n"
-                f"   • हे क्षेत्र **{region_data['bathymetry']['shelf_width_km']} किमी विस्तीर्ण शेल्फच्या उतारावर** (२५ ते ६० मीटर खोलीवर) आहे.\n"
-                f"   • समुद्रतळाचे नैसर्गिक खडक माशांच्या थव्यांना सुरक्षित आश्रय देतात आणि त्यांना खोल समुद्रात विखुरण्यापासून रोखतात.\n\n"
-                f"४. 🛡️ **हवामान व सागरी सुरक्षिततेची खात्री**:\n"
-                f"   • हवामान तपासणी: वाऱ्याचा वेग **{wind_val} नॉट्स ({wind_kmh} किमी/तास)** आणि लाटांची उंची **{wave_val} मीटर** असून ती सुरक्षित मर्यादेत आहे.\n"
-                f"   • सीमा सुरक्षा: हे क्षेत्र **आंतरराष्ट्रीय सीमेपासून (IMBL) {region_data['gis']['distance_to_imbl']} किमी दूर भारतीय सागरी हद्दीत** असून नौदल बंदी क्षेत्रापासून पूर्णपणे सुरक्षित आहे.\n\n"
-                f"५. 👥 **स्थानिक मच्छीमार व CMFRI नोंदींद्वारे पडताळणी**:\n"
-                f"   • CMFRI चे अधिकृत हंगामी नमुने आणि स्थानिक बंदरावरील ताज्या नोंदी या क्षेत्रात उत्तम मासेमारी होत असल्याचे प्रमाणित करतात."
-            )
-
-        elif intent == "gear":
-            body = (
-                f"🎣 **{reg_name_mr} साठी योग्य जाळे व गियर माहिती**:\n\n"
-                f"• **शिफारस केलेले मुख्य जाळे**: {species_info.get('gear_mr', 'ड्रिफ्ट नेट आणि गिलनेट')}\n"
-                f"• **कार्यरत सागरी खोली**: {species_info.get('depth_range_mr', '15 - 45 मीटर')}\n"
-                f"• **प्रमुख मासे**: {', '.join(species_info.get('primary_mr', []))}\n"
-                f"• **मेश साइजचे नियम**: लहान माशांच्या संवर्धनासाठी योग्य मेश आकाराचा (२५ मिमी ते १४० मिमी) वापर करावा.\n"
-                f"• **जाळे टाकण्याचा सल्ला**: सध्या समुद्रातील प्रवाह {region_data['ocean']['current_speed']} नॉट्स आहे — जाळे भरतीच्या प्रवाहाला काटकोनात लावावे."
-            )
-
-        elif intent == "market":
-            prices_str = "\n".join([f"  • **{k}**: {v}" for k, v in region_data["economics"]["dockside_prices"].items()])
-            body = (
-                f"💰 **मत्स्य बाजारभाव व आर्थिक मार्गदर्शन ({reg_name_mr})**:\n\n"
-                f"**आजचे अंदाजे लिलाव बाजारभाव (प्रति किलो)**:\n{prices_str}\n\n"
-                f"⛽ **डिझेल इंधन बचत सल्ला**: {region_data['economics'].get('fuel_saving_tips_mr', region_data['economics']['fuel_saving_tips'])}\n"
-                f"🧊 **बर्फ वापर प्रमाण**: मासे ताजे राहण्यासाठी १:१ प्रमाणात बर्फाचा वापर करा."
-            )
-
-        elif intent == "emergency":
-            checklist_str = "\n".join([f"  ✅ {item}" for item in region_data["emergency"].get("mandatory_checklist_mr", region_data["emergency"]["mandatory_checklist"])])
-            body = (
-                f"🚨 **आपत्कालीन मदत क्रमांक व सागरी सुरक्षा नियम ({reg_name_mr})**:\n\n"
-                f"• 📞 **भारतीय तटरक्षक दल (ICG २४x७ आपत्कालीन नंबर)**: **{region_data['emergency']['coast_guard_helpline']}**\n"
-                f"• 📻 **आंतरराष्ट्रीय आणीबाणी रेडिओ फ्रिक्वेन्सी**: **{region_data['emergency']['mrcc_frequency']}**\n"
-                f"• 👮 **सागरी पोलीस नियंत्रण कक्ष**: **{region_data['emergency']['coastal_police']}**\n\n"
-                f"**समुद्रात निघण्यापूर्वी अनिवार्य सुरक्षा तपासणी सूची**:\n{checklist_str}"
-            )
-
-        elif intent == "wave":
-            body = (
-                f"🌊 **सागरी लाटा व प्रवाहाचे स्वरूप ({reg_name_mr})**:\n\n"
-                f"• **लाटांची उंची**: **{wave_val} मीटर** ({wave_ft} फूट)\n"
-                f"• **उसळीचा कालावधी व दिशा**: **{region_data['ocean']['swell_period']} सेकंद** ({region_data['ocean']['swell_direction']} कडून)\n"
-                f"• **प्रवाहाचा वेग**: **{region_data['ocean']['current_speed']} नॉट्स** ({region_data['ocean']['current_direction']})\n"
-                f"• **समुद्राची स्थिती**: **{region_data['ocean'].get('sea_state_mr', region_data['ocean']['sea_state'])}**\n"
-                f"• **पाण्याची पारदर्शकता व तापमान**: {region_data['ocean']['underwater_visibility_m']} मीटर | पाण्याचे तापमान: {sst_val}°C"
-            )
-
-        elif intent == "weather":
-            body = (
-                f"🌤️ **हवामान व वातावरणीय नोंदी ({reg_name_mr})**:\n\n"
-                f"• **वाऱ्याचा वेग**: **{wind_val} नॉट्स ({wind_kmh} किमी/तास)** दिशा: {region_data['weather']['wind_direction']}\n"
-                f"• **वाऱ्याचे जोरदार झोत**: **{region_data['weather']['wind_gusts']} नॉट्स**\n"
-                f"• **हवेचा दाब (Barometer)**: **{region_data['weather']['barometric_pressure']} hPa** ({region_data['weather']['pressure_trend']})\n"
-                f"• **पावसाची शक्यता**: {region_data['weather']['precipitation']}%\n"
-                f"• **तापमान व आर्द्रता**: {region_data['weather']['air_temperature']}°C | आर्द्रता: {region_data['weather']['humidity']}%\n"
-                f"• **दृश्यमानता**: {region_data['weather']['visibility_nm']} सागरी मैल ({cond_mr})"
-            )
-
-        elif intent == "storm":
-            if has_storm_warning:
-                warn_mr = ", ".join(region_data["weather"].get("warnings_mr", ["वेगवान वादळी वाऱ्यांचा इशारा"]))
+            elif intent in ["species_expected", "fish_general"]:
+                exp_species_list = ", ".join(species_info.get("primary", ["Indian Mackerel", "Silver Pomfret", "Surmai", "Yellowfin Tuna"]))
                 body = (
-                    f"⚠️ **वादळ व चक्रीवादळ इशारा**: {reg_name_mr} भागात वादळी हवामानाचा इशारा जारी आहे ({warn_mr})!\n\n"
-                    f"• वाऱ्याचा वेग: **{wind_val} नॉट्स ({wind_kmh} किमी/तास)** झोत: **{region_data['weather']['wind_gusts']} नॉट्स**\n"
-                    f"• लाटांची उंची: **{wave_val} मीटर** ({region_data['ocean'].get('sea_state_mr', region_data['ocean']['sea_state'])})\n"
-                    f"• हवेचा दाब: **{region_data['weather']['barometric_pressure']} hPa**\n"
-                    f"🛡️ **सूचना**: मच्छीमारांनी समुद्रात जाणे पूर्णपणे टाळावे व बोटी त्वरित किनाऱ्यावर आणाव्यात."
-                )
-            else:
-                body = (
-                    f"✅ **वादळाचा कोणताही इशारा नाही**: सध्या {reg_name_mr} परिसरात वादळाचा अथवा चक्रीवादळाचा कोणताही इशारा नाही.\n\n"
-                    f"• हवामान: {cond_mr}\n"
-                    f"• वारे: {wind_val} नॉट्स | लाटा: {wave_val} मीटर | हवेचा दाब: {region_data['weather']['barometric_pressure']} hPa (स्थिर)"
+                    f"🐟 **EXPECTED FISH SPECIES NEAR {reg_name_en.upper()} ({time_ctx['en'] if time_ctx['en'] else 'THIS WEEK'})**\n\n"
+                    f"Along the **{reg_name_en}** coastline and mid-shelf waters this week, fishermen should primarily expect healthy biomass of **{exp_species_list}**.\n\n"
+                    f"• **Bathymetric Depth & Habitat**: Target depths range between **{species_info.get('depth_range', '20 - 55 meters')}** along the continental shelf contours where upwelling concentrates forage shoals.\n"
+                    f"• **Oceanic Indicators**: Satellite remote sensing records rich chlorophyll-a concentrations at **{chloro_val} mg/m³** and sea surface temperatures at **{sst_val}°C**, creating an active thermal convergence front located 18-35 km offshore.\n"
+                    f"• **Recommended Tackle & Gear**: Deploy **{species_info.get('gear', 'Trolling lines with wire trace and pelagic driftnets')}** during early morning tidal influxes.\n"
+                    f"• **Commercial Value**: Dockside auction rates are averaging **{species_info.get('prices', '₹600 - ₹850/kg for Surmai, ₹240 - ₹380/kg for Tuna, ₹140 - ₹220/kg for Mackerel')}** with strong local market demand."
                 )
 
-        elif intent == "tide":
-            body = (
-                f"⏳ **भरती-ओहोटी वेळापत्रक व नौकायन वेळ ({reg_name_mr})**:\n\n"
-                f"• 🔺 **पहिली भरती (High Tide)**: {region_data['tide']['high_tide_1']}\n"
-                f"• 🔻 **पहिली ओहोटी (Low Tide)**: {region_data['tide']['low_tide_1']}\n"
-                f"• 🔺 **दुसरी भरती**: {region_data['tide']['high_tide_2']}\n"
-                f"• 🔻 **दुसरी ओहोटी**: {region_data['tide']['low_tide_2']}\n\n"
-                f"• **भरती मर्यादा व प्रकार**: {region_data['tide']['tidal_range_m']} मीटर ({region_data['tide'].get('cycle_mr', region_data['tide']['cycle'])})\n"
-                f"• **शांत पाण्याचा कालावधी (Slack Water)**: {region_data['tide'].get('slack_window_mr', region_data['tide']['slack_window'])}\n"
-                f"• **सँडबार पाण्याची खोली**: ओहोटीच्या वेळीही {region_data['tide']['sandbar_clearance_m']} मीटर सुरक्षित खोली."
-            )
+            elif intent == "timing":
+                body = (
+                    f"⏰ **OPTIMAL FISHING & HARBOR DEPARTURE TIMING FOR {reg_name_en.upper()}**\n\n"
+                    f"For {reg_name_en} {time_ctx['en'] if time_ctx['en'] else 'tomorrow morning'}, the prime fishing window is **{species_info.get('catch_window', 'Early Morning 04:30 AM to 08:30 AM')}**, coinciding with low-light surface feeding by pelagic shoals.\n\n"
+                    f"• **Harbor Departure Slack Window**: The safest harbor exit is during tidal slack from **{region_data['tide']['slack_window']}**, which minimizes channel cross-currents and turbulence over shallow sandbar bars.\n"
+                    f"• **Tidal Schedule**: High Tide 1 occurs at **{region_data['tide']['high_tide_1']}** and Low Tide 1 at **{region_data['tide']['low_tide_1']}**, providing **{region_data['tide']['sandbar_clearance_m']} meters of keel draft clearance**.\n"
+                    f"• **Sea State Dynamics**: Surface winds of **{wind_val} knots** and swells of **{wave_val}m** will be at their calmest before 09:00 AM, maximizing fuel efficiency and trolling line stability."
+                )
 
-        elif intent == "satellite":
-            body = (
-                f"🛰️ **उपग्रह क्लोरोफिल व PFZ मासेमारी पट्टा विश्लेषण ({reg_name_mr})**:\n\n"
-                f"• **क्लोरोफिल प्रमाण**: **{chloro_val} mg/m³** ({region_data['satellite'].get('pfz_status_mr', region_data['satellite']['pfz_status'])})\n"
-                f"• **समुद्राचे तापमान (SST)**: **{sst_val}°C** (बदल: {region_data['satellite']['sst_anomaly']:+}°C)\n"
-                f"• **प्लवक (Plankton) घनता**: {region_data['satellite']['plankton_density']}\n"
-                f"• **थर्मल फ्रंट सीमा**: {region_data['satellite']['thermal_front']}\n"
-                f"• **उपग्रह स्रोत**: {region_data['satellite']['sensor_source']}"
-            )
+            elif intent == "trip_advisory":
+                if total_risk < 40:
+                    verdict_banner = "✅ **YES, CONDITIONS ARE FAVORABLE TO GO FISHING TOMORROW.**"
+                    verdict_sub = "Weather, waves, and atmospheric conditions are well within safe operating limits."
+                elif total_risk < 70:
+                    verdict_banner = "⚠️ **PROCEED WITH CAUTION — NEARSHORE FISHING ONLY.**"
+                    verdict_sub = "Nearshore waters are manageable, but offshore deep sea has choppy swells and gusty winds."
+                else:
+                    verdict_banner = "❌ **NO, IT IS NOT SAFE TO GO FISHING TOMORROW.**"
+                    verdict_sub = "Dangerous marine conditions with high wave swells and severe wind gusts are forecasted."
 
-        elif intent == "bathymetry":
-            body = (
-                f"🗺️ **समुद्रतळ व महाद्वीपीय शेल्फ खोली ({reg_name_mr})**:\n\n"
-                f"• **शेल्फचा विस्तार**: किनाऱ्यापासून {region_data['bathymetry']['shelf_width_km']} किमी\n"
-                f"• **समुद्रतळाचा प्रकार**: {region_data['bathymetry'].get('seabed_type_mr', region_data['bathymetry']['seabed_type'])}\n"
-                f"• **सागरी खोली (Contours)**:\n"
-                f"  - १० किमी अंतरावर: {region_data['bathymetry']['depth_10km']}\n"
-                f"  - २५ किमी अंतरावर: {region_data['bathymetry']['depth_25km']}\n"
-                f"  - ५० किमी अंतरावर: {region_data['bathymetry']['depth_50km']}\n"
-                f"  - शेल्फ ब्रेक: {region_data['bathymetry']['depth_shelf_break']}"
-            )
+                body = (
+                    f"{verdict_banner}\n{verdict_sub}\n\n"
+                    f"📊 **Detailed Environmental Breakdown for {reg_name_en}**:\n\n"
+                    f"1. 🌤️ **Weather & Wind**: Wind speed **{wind_val} knots ({wind_kmh} km/h)** from {region_data['weather']['wind_direction']}, gusts to **{region_data['weather']['wind_gusts']} knots**, barometer **{region_data['weather']['barometric_pressure']} hPa** ({region_data['weather']['condition']}).\n"
+                    f"2. 🌊 **Waves & Sea State**: Significant wave height **{wave_val} meters** ({region_data['ocean']['sea_state']}) with an **{region_data['ocean']['swell_period']}s swell period** and surface drift current of **{region_data['ocean']['current_speed']} kts**.\n"
+                    f"3. ⏳ **Tide & Departure Window**: High Tide at {region_data['tide']['high_tide_1']} | Low Tide at {region_data['tide']['low_tide_1']}. Optimal harbor departure slack window is **{region_data['tide']['slack_window']}**.\n"
+                    f"4. 📋 **Safety Checklist**: Equip lifejackets for all crew, monitor VHF **Channel 16**, check fuel lines, and save the Coast Guard Helpline **{region_data['emergency']['coast_guard_helpline']}**."
+                )
 
-        elif intent == "gis":
-            zones_str = "\n".join([f"  • **{z.get('name_mr', z['name'])}**: {z['distance_km']} किमी दूर ({z.get('status_mr', z['status'])})" for z in region_data["gis"]["restricted_zones"]])
-            body = (
-                f"🌐 **सागरी सीमा व प्रतिबंधित क्षेत्र माहिती ({reg_name_mr})**:\n\n"
-                f"• **आंतरराष्ट्रीय सागरी सीमेपासून (IMBL) अंतर**: **{region_data['gis']['distance_to_imbl']} किमी**\n"
-                f"• **सीमा सुरक्षा स्थिती**: {region_data['gis'].get('imbl_status_mr', region_data['gis']['imbl_status'])}\n\n"
-                f"**जवळचे प्रतिबंधित सागरी क्षेत्र**:\n{zones_str}"
-            )
+            elif intent == "species_profile":
+                sp_key = target_species if target_species else "tuna"
+                prof = species_profiles.get(sp_key) or GLOBAL_SPECIES_PROFILES.get(sp_key) or GLOBAL_SPECIES_PROFILES["tuna"]
+                
+                body = (
+                    f"🐟 **Target Species Guide: {prof.get('name', 'Marine Species')}** (*{prof.get('scientific', '')}*)\n\n"
+                    f"• 📍 **Best Location & Distance**: {prof.get('location', prof.get('hotspot', 'Continental shelf drop-offs 25-60 km offshore along the 100m contour'))}.\n"
+                    f"• 📏 **Optimal Swimming Depth**: **{prof.get('depth', '30 - 80 meters')}** in the epipelagic zone above the thermocline.\n"
+                    f"• 🪱 **Bait, Tackle & Gear**: {prof.get('bait', 'Whole sardines, mackerel, and squid')} using **{prof.get('gear', 'Heavy trolling lines and pelagic driftnets')}** with steel wire trace leaders.\n"
+                    f"• 🌤️ **Ideal Ocean & Weather Conditions**: {prof.get('weather', prof.get('weather_conditions', 'Mild breeze 8-14 knots, clear blue water'))} with Sea Surface Temp around **{prof.get('temp_opt', '27.0°C - 29.5°C')}** (Current SST in {reg_name_en}: {sst_val}°C).\n"
+                    f"• 💰 **Market Value & Preservation**: Estimated auction rate is **{prof.get('market_price', '₹240 - ₹380/kg')}**; chill in 1:1 ice slurry immediately upon landing."
+                )
 
-        elif intent == "community":
-            if len(region_reports) > 0:
-                rep_list_str = "\n".join([f"  • [{r.get('timestamp_mr', r['timestamp'])}] ({r.get('type_mr', r['type'])}): \"{r.get('text_mr', r['text'])}\"" for r in region_reports])
-                body = f"👥 **स्थानिक मच्छीमार समुदाय अहवाल ({reg_name_mr})**:\n\n{rep_list_str}"
+            elif intent == "small_boat_safety":
+                body = (
+                    f"🛡️ **Small Boat Safety Assessment (Wind Speed: 25 km/h / 13.5 knots)**:\n\n"
+                    f"⚠️ **DIRECT VERDICT: CAUTION — AVOID DEEP OFFSHORE WATERS IN A SMALL BOAT.**\n\n"
+                    f"1. 🌊 **Why 25 km/h Wind is Risky**: A 25 km/h sustained wind creates choppy **1.2 to 1.8 meter steep waves** with breaking whitecaps. Small FRP fiber boats have low freeboards (< 0.6m), allowing cresting waves to flood the bilge.\n"
+                    f"2. ⚠️ **Capsizing Hazards**: Beam seas cause severe rolling while hauling nets. Outboard motors (OBMs) also risk cavitation when the boat pitches.\n"
+                    f"3. 📍 **Safe Boundary**: Stay within sheltered inshore waters (**3 to 5 nautical miles / 5 to 8 km from shore**); strictly avoid deep offshore waters (> 10 NM).\n"
+                    f"4. 🛡️ **Safety Rules**: Wear lifejackets, keep a manual bailer/pump ready, travel in a 2-boat buddy system, and return immediately if gusts exceed 30 km/h."
+                )
+
+            elif intent == "pfz_discrepancy":
+                body = (
+                    f"🔍 **Why Predicted Fishing Zones (PFZ) May Differ from Actual Catch Locations**:\n\n"
+                    f"Satellite PFZ models identify high-probability feeding corridors, but actual catches often shift due to 5 scientific factors:\n\n"
+                    f"1. ⏱️ **Satellite Time Lag (12-24h)**: Ocean surface currents (0.5-1.5 kts) drift the plankton bloom **5 to 15 km** before boats arrive.\n"
+                    f"2. 🌊 **Surface vs. Thermocline Depth**: Satellites measure only the top 1mm surface layer, while pelagic fish feed **20 to 60m deep** along comfortable thermal layers.\n"
+                    f"3. 🦐 **Food Chain Drift**: Plankton attracts small baitfish, and larger predators (Tuna, Surmai) chase baitfish **5 to 10 km downstream** of the initial bloom.\n"
+                    f"4. 🚤 **Boat Engine Acoustics**: Heavy boat traffic in publicized coordinates scatters schools into deeper trenches.\n"
+                    f"5. ☁️ **Cloud Cover Obstruction**: Monsoon clouds require optical models to interpolate coordinates.\n\n"
+                    f"💡 **Tip**: Once in the PFZ, follow **diving seabirds** and depth sounders for the exact school location."
+                )
+
+            elif intent == "pfz_explanation":
+                body = (
+                    f"🧠 **Multi-Agent Explanation: Why INNOWAVE Recommended This Fishing Zone**:\n\n"
+                    f"INNOWAVE selected this zone near **{reg_name_en}** through 5 verified scientific layers:\n\n"
+                    f"1. 🌿 **Satellite Ocean Color**: Chlorophyll-a density is evaluated at **{chloro_val} mg/m³**, indicating active diatom phytoplankton blooms.\n"
+                    f"2. 🌡️ **Thermal Upwelling Front**: Sea surface temperature measures **{sst_val}°C**, identifying a nutrient-rich cold-water upwelling boundary.\n"
+                    f"3. 🗺️ **Bathymetric Shelf Funneling**: Located along the {region_data['bathymetry']['shelf_width_km']} km continental shelf contour (depth: 25-60m) that naturally aggregates forage fish.\n"
+                    f"4. 🛡️ **Weather & IMBL Safety Clearance**: Located **{region_data['gis']['distance_to_imbl']} km inside Indian territorial waters** with safe waves ({wave_val}m) and manageable winds ({wind_val} kts).\n"
+                    f"5. 👥 **Community & CMFRI Validation**: Corroborated by regional catch logs confirming active landings of {', '.join(species_info.get('primary', [])[:3])}."
+                )
+
+            elif intent == "market":
+                prices_str = "\n".join([f"  • **{k}**: {v}" for k, v in region_data["economics"]["dockside_prices"].items()])
+                body = (
+                    f"💰 **Dockside Market Rates & Economic Insights ({reg_name_en})**:\n\n"
+                    f"**Current Estimated Fish Auction Rates**:\n{prices_str}\n\n"
+                    f"⛽ **Fuel Optimization**: {region_data['economics']['fuel_saving_tips']}\n"
+                    f"🧊 **Preservation Guide**: {region_data['economics']['ice_ratio']} recommended for optimal market freshness."
+                )
+
+            elif intent == "emergency":
+                checklist_str = "\n".join([f"  ✅ {item}" for item in region_data["emergency"]["mandatory_checklist"]])
+                body = (
+                    f"🚨 **Emergency Helplines & Maritime Safety Protocol ({reg_name_en})**:\n\n"
+                    f"• 📞 **Indian Coast Guard 24x7 Distress**: **{region_data['emergency']['coast_guard_helpline']}**\n"
+                    f"• 📻 **International Distress Frequency**: **{region_data['emergency']['mrcc_frequency']}**\n"
+                    f"• 👮 **Coastal Police Control**: **{region_data['emergency']['coastal_police']}**\n\n"
+                    f"**Mandatory Pre-Sailing Safety Checklist**:\n{checklist_str}"
+                )
+
+            elif intent == "wave":
+                body = (
+                    f"🌊 **Hydrodynamics & Sea State Analysis for {reg_name_en}**:\n\n"
+                    f"• **Significant Wave Height**: **{wave_val} meters** ({wave_ft} feet)\n"
+                    f"• **Swell Period & Heading**: **{region_data['ocean']['swell_period']} seconds** from **{region_data['ocean']['swell_direction']}**\n"
+                    f"• **Surface Drift Current**: **{region_data['ocean']['current_speed']} knots** heading {region_data['ocean']['current_direction']}\n"
+                    f"• **Sea State Severity**: **{region_data['ocean']['sea_state']}** (SST: {sst_val}°C)"
+                )
+
+            elif intent == "weather":
+                body = (
+                    f"🌤️ **Atmospheric & Weather Telemetry for {reg_name_en}**:\n\n"
+                    f"• **Wind Speed**: **{wind_val} knots ({wind_kmh} km/h)** from {region_data['weather']['wind_direction']} (Gusts: **{region_data['weather']['wind_gusts']} kts**)\n"
+                    f"• **Barometric Pressure**: **{region_data['weather']['barometric_pressure']} hPa** ({region_data['weather']['pressure_trend']})\n"
+                    f"• **Precipitation Probability**: {region_data['weather']['precipitation']}%\n"
+                    f"• **Marine Visibility**: {region_data['weather']['visibility_nm']} nautical miles ({region_data['weather']['condition']})"
+                )
+
+            elif intent == "storm":
+                if has_storm_warning:
+                    warnings_str = ", ".join(region_data["weather"].get("warnings", ["Squall Advisory"]))
+                    body = (
+                        f"⚠️ **STORM & CYCLONE ALERT**: Active storm advisory in effect for {reg_name_en} ({warnings_str})!\n\n"
+                        f"• Wind Speed: **{wind_val} knots ({wind_kmh} km/h)** with squall gusts to **{region_data['weather']['wind_gusts']} kts**\n"
+                        f"• Swells: **{wave_val}m** ({region_data['ocean']['sea_state']})\n"
+                        f"🛡️ **Advisory**: Fishermen are strictly warned NOT to venture into open waters. Return to port immediately."
+                    )
+                else:
+                    body = (
+                        f"✅ **NO STORM ALERT**: No active storm, cyclone, or squall warnings for {reg_name_en}.\n\n"
+                        f"• Weather: {region_data['weather']['condition']} | Winds: {wind_val} knots | Swells: {wave_val}m | Barometer: {region_data['weather']['barometric_pressure']} hPa"
+                    )
+
+            elif intent == "tide":
+                body = (
+                    f"⏳ **Tidal Schedule & Navigation Window ({reg_name_en})**:\n\n"
+                    f"• 🔺 **High Tide 1**: {region_data['tide']['high_tide_1']} | 🔻 **Low Tide 1**: {region_data['tide']['low_tide_1']}\n"
+                    f"• 🔺 **High Tide 2**: {region_data['tide']['high_tide_2']} | 🔻 **Low Tide 2**: {region_data['tide']['low_tide_2']}\n"
+                    f"• **Optimal Slack Navigation Window**: {region_data['tide']['slack_window']}\n"
+                    f"• **Harbor Sandbar Clearance**: {region_data['tide']['sandbar_clearance_m']}m draft clearance."
+                )
+
             else:
-                body = f"👥 **स्थानिक मच्छीमार अहवाल**: {reg_name_mr} भागात मागील १२ तासांत नवीन नोंद नाही."
+                body = (
+                    f"🛰️ **Marine Overview for {reg_name_en}**:\n\n"
+                    f"• **Potential Fishing Zone**: Chlorophyll at **{chloro_val} mg/m³** and SST at **{sst_val}°C**.\n"
+                    f"• **Primary Species Expected**: {', '.join(species_info.get('primary', ['Indian Mackerel', 'Sardines']))}\n"
+                    f"• **Safety Rating**: **{danger_level}** (Threat Score: {total_risk}/100, Wind: {wind_val} kts, Waves: {wave_val}m)."
+                )
 
-        elif intent == "timing":
-            body = (
-                f"⏰ **सर्वोत्तम मासेमारी वेळ व नौका प्रस्थान ({reg_name_mr})**:\n\n"
-                f"• **सर्वोत्तम मासेमारी वेळ**: **{species_info.get('catch_window_mr', 'पहाटे ०५:०० ते सकाळी ०९:३० वाजेपर्यंत')}** (भरतीच्या वेळी माशांची जास्त हालचाल)\n"
-                f"• **बोट सोडण्याची शांत वेळ**: {region_data['tide'].get('slack_window_mr', region_data['tide']['slack_window'])}\n"
-                f"• **सागरी स्थिती**: लाटा {wave_val} मीटर | वारे {wind_val} नॉट्स ({region_data['weather']['wind_direction']})\n"
-                f"• **प्रमुख मासे**: {', '.join(species_info.get('primary_mr', []))}"
-            )
+            final_answer = body
 
-        elif intent == "safety":
-            safety_verdict = "होय, आज समुद्रात जाणे पूर्णपणे सुरक्षित आहे." if danger_level == "SAFE" else "आज समुद्रात जाताना विशेष सावधगिरी बाळगावी." if danger_level == "CAUTION" else "नाही, आज समुद्रात जाणे अत्यंत धोकादायक आहे."
-            body = (
-                f"🛡️ **सुरक्षा निष्कर्ष व धोका विश्लेषण**:\n\n"
-                f"**{safety_verdict}**\n\n"
-                f"• **सुरक्षा पातळी**: **{danger_mr}** (जोखिम निर्देशांक: {total_risk}/100)\n"
-                f"• **लाटांची उंची**: {wave_val} मीटर ({region_data['ocean'].get('sea_state_mr', region_data['ocean']['sea_state'])})\n"
-                f"• **वाऱ्याचा वेग व झोत**: {wind_val} नॉट्स ({wind_kmh} किमी/तास) | झोत: {region_data['weather']['wind_gusts']} नॉट्स\n"
-                f"• **हवामान**: {cond_mr} | हवेचा दाब: {region_data['weather']['barometric_pressure']} hPa\n"
-                f"• **सीमेपासून अंतर**: IMBL पासून {region_data['gis']['distance_to_imbl']} किमी दूर"
-            )
+        elif lang == "hi":
+            if intent == "safety":
+                if danger_level == "SAFE":
+                    verdict_banner = f"✅ **हाँ, आज {reg_name_hi} के पास समुद्र में मछली पकड़ने जाना पूरी तरह सुरक्षित है।**"
+                    verdict_reason = f"मौसमी और सागरीय आंकड़े अनुकूल हैं। हवा की गति **{wind_val} नॉट ({wind_kmh} किमी/घंटा)** दिशा {region_data['weather']['wind_direction']} है तथा लहरों की ऊंचाई नियंत्रित **{wave_val} मीटर** है।"
+                elif danger_level == "CAUTION":
+                    verdict_banner = f"⚠️ **आज {reg_name_hi} के पास समुद्र में जाने के लिए सावधानी बरतने की सलाह दी जाती है।**"
+                    verdict_reason = f"तट के 3-5 नॉटिकल मील के भीतर स्थिति सामान्य है, परंतु गहरे समुद्र में **{wave_val} मीटर** की अशांत लहरें और **{region_data['weather']['wind_gusts']} नॉट** के तेज झोंके हैं।"
+                else:
+                    verdict_banner = f"🚫 **नहीं, आज {reg_name_hi} के पास समुद्र में जाना खतरनाक और असुरक्षित है।**"
+                    verdict_reason = f"खराब मौसम के कारण **{wave_val} मीटर** की ऊंची तूफानी लहरें और **{region_data['weather']['wind_gusts']} नॉट** की तेज आंधी चल रही है।"
 
-        else: # fish_general or general
-            species_list_mr = ", ".join(species_info.get("primary_mr", ["बांगडा", "पापलेट", "बोंबील", "तारली"]))
-            body = (
-                f"🛰️ **मासेमारी व सागरी माहिती अहवाल ({reg_name_mr})**:\n\n"
-                f"• **संभाव्य मासेमारी क्षेत्र (PFZ)**: {region_data['satellite'].get('pfz_status_mr', 'उच्च संभाव्य क्षेत्र')} (क्लोरोफिल: {chloro_val} mg/m³, तापमान: {sst_val}°C)\n"
-                f"• **सापडणारे मुख्य मासे**: {species_list_mr}\n"
-                f"• **जाळे व खोली**: {species_info.get('gear_mr', 'ड्रिफ्ट नेट')} ({species_info.get('depth_range_mr', '15-45 मीटर')})\n"
-                f"• **भरती वेळ**: भरती {region_data['tide']['high_tide_1']}, ओहोटी {region_data['tide']['low_tide_1']}\n"
-                f"• **सुरक्षा रेटिंग**: **{danger_mr}** (धोका निर्देशांक: {total_risk}/100, वारे: {wind_val} नॉट्स, लाटा: {wave_val} मीटर)"
-            )
-            
-        final_answer = f"{intro}\n\n{body}"
+                body = (
+                    f"{verdict_banner}\n\n"
+                    f"{verdict_reason} समग्र खतरा इंडेक्स **{total_risk}/100 ({danger_hi})** पर है तथा वायुदाब **{region_data['weather']['barometric_pressure']} hPa** पर स्थिर है।\n\n"
+                    f"यह क्षेत्र अंतरराष्ट्रीय समुद्री सीमा (IMBL) से **{region_data['gis']['distance_to_imbl']} किमी सुरक्षित दूरी** पर है। सभी मछुआरे लाइफ जैकेट अवश्य पहनें और VHF मरीन रेडियो चैनल 16 पर चालू रखें।"
+                )
+
+            elif intent == "danger_index_explanation":
+                body = (
+                    f"🧠 **खतरा इंडेक्स (DANGER INDEX) का संपूर्ण वैज्ञानिक विश्लेषण: {total_risk}/100 ({danger_hi})**\n\n"
+                    f"वर्तमान में **{reg_name_hi}** हेतु खतरा इंडेक्स **{total_risk}/100** आंका गया है। इसके 4 प्रमुख वैज्ञानिक घटक निम्न हैं:\n\n"
+                    f"१. 💨 **हवा का खतरा ({round(wind_risk, 1)} / 35 अंक)**: हवा की गति **{wind_val} नॉट ({wind_kmh} किमी/घंटा)** और झोंके **{region_data['weather']['wind_gusts']} नॉट** के आधार पर।\n"
+                    f"२. 🌊 **लहरों का खतरा ({round(wave_risk, 1)} / 35 अंक)**: लहरों की ऊंचाई **{wave_val} मीटर** और **{region_data['ocean']['swell_period']} सेकंड** की उफान अवधि पर आधारित।\n"
+                    f"३. 🌐 **सीमा व प्रतिबंधित क्षेत्र ({round(gis_risk, 1)} / 30 अंक)**: IMBL सीमा से **{region_data['gis']['distance_to_imbl']} किमी** दूर पूर्णतः सुरक्षित।\n"
+                    f"४. 👥 **सामुदायिक व मौसम अलर्ट ({community_risk_mod:+d} अंक)**: स्थानीय बंदरगाह से प्राप्त सत्यापित रिपोर्टों के अनुसार।\n\n"
+                    f"**निष्कर्ष**: {total_risk}/100 का स्कोर दर्शाता है कि वर्तमान में स्थिति **{danger_hi}** श्रेणी में है।"
+                )
+
+            elif intent in ["species_expected", "fish_general"]:
+                exp_species_list = ", ".join(species_info.get("primary_hi", species_info.get("primary", ["बांगड़ा", "सिल्वर पापलेट", "सुरमई", "टूना"])))
+                body = (
+                    f"🐟 **{reg_name_hi} के पास मिलने वाली अपेक्षित मछलियाँ ({time_ctx['hi'] if time_ctx['hi'] else 'इस सप्ताह'})**\n\n"
+                    f"इस सप्ताह **{reg_name_hi}** के तटीय व मध्य-शेल्फ क्षेत्रों में मुख्य रूप से **{exp_species_list}** का अच्छा भंडार मिलने की प्रबल संभावना है।\n\n"
+                    f"• **अनुकूल गहराई व क्षेत्र**: महाद्वीपीय शेल्फ पर **{species_info.get('depth_range', '20 - 55 मीटर')}** की गहराई में मछलियों के झुंड सक्रिय हैं।\n"
+                    f"• **सागरीय स्थिति**: उपग्रह से प्राप्त क्लोरोफिल स्तर **{chloro_val} मि.ग्रा./घन मीटर** और समुद्री तापमान **{sst_val}°C** है, जो तट से 20-35 किमी दूर उत्तम थर्मल फ्रंट बनाता है।\n"
+                    f"• **अनुशंसित गियर**: सुबह की चढ़ती ज्वार के समय **{species_info.get('gear_hi', 'ट्रोलिंग लाइन्स व पेलाजिक ड्रिफ्ट जाल')}** का प्रयोग करें।\n"
+                    f"• **बाजार भाव**: वर्तमान मंडी दरें **सुरमई: ₹600-850/किग्रा, टूना: ₹240-380/किग्रा, बांगड़ा: ₹140-220/किग्रा** चल रही हैं।"
+                )
+
+            elif intent == "timing":
+                body = (
+                    f"⏰ **{reg_name_hi} हेतु मछली पकड़ने व नाव प्रस्थान का सबसे अनुकूल समय**\n\n"
+                    f"**{reg_name_hi}** के लिए {time_ctx['hi'] if time_ctx['hi'] else 'कल सुबह'} मछली पकड़ने का सर्वोत्तम समय **{species_info.get('catch_window_hi', 'सुबह 04:30 से 08:30 बजे')}** है, जब चढ़ती ज्वार के समय मछलियाँ सतह पर शिकार करती हैं।\n\n"
+                    f"• **शांत जल प्रस्थान समय (Slack Window)**: बंदरगाह से निकलने का सबसे शांत समय **{region_data['tide'].get('slack_window_hi', region_data['tide']['slack_window'])}** है, जिससे सैंडबार चैनल में नाव सुरक्षित रहती है।\n"
+                    f"• **ज्वार-भाटा स्थिति**: उच्च ज्वार **{region_data['tide']['high_tide_1']}** पर और निम्न ज्वार **{region_data['tide']['low_tide_1']}** पर रहेगा, जिससे **{region_data['tide']['sandbar_clearance_m']} मीटर की सुरक्षित ड्राफ्ट गहराई** मिलेगी।\n"
+                    f"• **मौसम**: सुबह 09:00 बजे से पहले हवाएँ (**{wind_val} नॉट**) और लहरें (**{wave_val}m**) सबसे शांत रहेंगी।"
+                )
+
+            elif intent == "trip_advisory":
+                if total_risk < 40:
+                    verdict_banner = "✅ **हाँ, कल मछली पकड़ने जाने के लिए मौसम और समुद्र अनुकूल है।**"
+                    verdict_sub = "हवा, लहरें और मौसमी परिस्थितियाँ पूरी तरह सुरक्षित सीमा के भीतर हैं।"
+                elif total_risk < 70:
+                    verdict_banner = "⚠️ **सावधानी बरतें — केवल तटीय क्षेत्र में ही मछली पकड़ें।**"
+                    verdict_sub = "तट के पास स्थिति सामान्य है, परंतु गहरे समुद्र में तेज लहरों और हवा के झोंके का जोखिम है।"
+                else:
+                    verdict_banner = "❌ **नहीं, कल समुद्र में मछली पकड़ने जाना असुरक्षित व खतरनाक है।**"
+                    verdict_sub = "समुद्र में ऊंची तूफानी लहरों और तेज हवाओं की चेतावनी जारी है।"
+
+                body = (
+                    f"{verdict_banner}\n{verdict_sub}\n\n"
+                    f"📊 **{reg_name_hi} हेतु विस्तृत विश्लेषण**:\n\n"
+                    f"१. 🌤️ **मौसम व हवा**: हवा की गति **{wind_val} नॉट ({wind_kmh} किमी/घंटा)**, झोंके **{region_data['weather']['wind_gusts']} नॉट**, वायुदाब **{region_data['weather']['barometric_pressure']} hPa** ({cond_hi})।\n"
+                    f"२. 🌊 **लहरें व समुद्र स्थिति**: लहरों की ऊंचाई **{wave_val} मीटर** ({region_data['ocean'].get('sea_state_hi', region_data['ocean']['sea_state'])}) व प्रवाह {region_data['ocean']['current_speed']} नॉट।\n"
+                    f"३. ⏳ **ज्वार व प्रस्थान समय**: उच्च ज्वार {region_data['tide']['high_tide_1']} | शांत प्रस्थान समय **{region_data['tide'].get('slack_window_hi', region_data['tide']['slack_window'])}**।\n"
+                    f"४. 📋 **सुरक्षा नियम**: लाइफ जैकेट पहनें, VHF चैनल 16 जांचें व तटरक्षक हेल्पलाइन **{region_data['emergency']['coast_guard_helpline']}** रखें।"
+                )
+
+            elif intent == "species_profile":
+                sp_key = target_species if target_species else "tuna"
+                prof = species_profiles.get(sp_key) or GLOBAL_SPECIES_PROFILES.get(sp_key) or GLOBAL_SPECIES_PROFILES["tuna"]
+                body = (
+                    f"🐟 **लक्षित मछली संपूर्ण गाइड: {prof.get('name_hi', prof.get('name', 'मछली'))}** (*{prof.get('scientific', '')}*)\n\n"
+                    f"• 📍 **स्थान व दूरी**: {prof.get('location_hi', prof.get('hotspot', 'तट से 25-60 किमी दूर महाद्वीपीय शेल्फ ढलान'))}।\n"
+                    f"• 📏 **अनुकूल गहराई**: **{prof.get('depth_hi', prof.get('depth', '30 - 80 मीटर'))}** की गहराई में।\n"
+                    f"• 🪱 **चारा व जाल**: {prof.get('bait_hi', prof.get('bait', 'ताजी सार्डिन, बांगड़ा, स्क्विड'))} व **{prof.get('gear_hi', prof.get('gear', 'पेलाजिक लॉन्गलाइन व ट्रोलिंग लाइन्स'))}**।\n"
+                    f"• 🌤️ **मौसम व तापमान**: {prof.get('weather_hi', 'हल्की हवा 8-14 नॉट, साफ पानी')} तथा तापमान **{prof.get('temp_opt', '27.0°C - 29.5°C')}** (वर्तमान तापमान: {sst_val}°C)।\n"
+                    f"• 💰 **बाजार भाव**: अनुमानित दर **{prof.get('market_price_hi', prof.get('market_price', '₹240 - ₹380 प्रति किग्रा'))}**; 1:1 बर्फ अनुपात में रखें।"
+                )
+
+            elif intent == "small_boat_safety":
+                body = (
+                    f"🛡️ **छोटी नाव सुरक्षा विश्लेषण (हवा की गति: 25 किमी/घंटा / 13.5 नॉट)**:\n\n"
+                    f"⚠️ **सीधा निष्कर्ष: सावधानी — 25 किमी/घंटा हवा में छोटी नाव लेकर गहरे समुद्र में न जाएं।**\n\n"
+                    f"१. 🌊 **लहरों का खतरा**: 25 किमी/घंटा हवा से **1.2 से 1.8 मीटर** ऊंची अशांत लहरें बनती हैं, जिससे छोटी फाइबर (FRP) नावों में पानी भरने का खतरा रहता है।\n"
+                    f"२. ⚠️ **असंतुलन का जोखिम**: लहरों के आड़े घूमने से नाव डोलती है और इंजन में पानी जा सकता है।\n"
+                    f"३. 📍 **सुरक्षित सीमा**: केवल तट के पास (**3 से 5 नॉटिकल मील / 5-8 किमी के भीतर**) ही रहें; गहरे समुद्र में बिल्कुल न जाएं।\n"
+                    f"४. 🛡️ **सुरक्षा उपकरण**: लाइफ जैकेट अनिवार्य पहनें और तटरक्षक हेल्पलाइन **{region_data['emergency']['coast_guard_helpline']}** याद रखें।"
+                )
+
+            elif intent == "pfz_discrepancy":
+                body = (
+                    f"🔍 **भविष्यवाणी किया गया मत्स्य क्षेत्र (PFZ) वास्तविक मछली मिलने की जगह से अलग क्यों हो सकता है?**:\n\n"
+                    f"१. ⏱️ **डेटा का समय-अंतर (12-24 घंटे)**: समुद्री धाराएं प्लवक को 5 से 15 किमी आगे बहा ले जाती हैं।\n"
+                    f"२. 🌊 **सतह बनाम गहराई का तापमान**: उपग्रह केवल ऊपरी 1 मिमी परत मापता है, जबकि मछलियां 20-60 मीटर नीचे तैरती हैं।\n"
+                    f"३. 🦐 **खाद्य श्रृंखला में गतिशीलता**: शिकारी मछलियां (टूना, सुरमई) प्लवक के पीछे 5-10 किमी आगे निकल जाती हैं।\n"
+                    f"४. 🚤 **नावों का शोर**: इंजनों के शोर से मछलियां गहराई में भाग जाती हैं।\n"
+                    f"५. ☁️ **बादलों का अवरोध**: घने बादलों के कारण उपग्रह डेटा का अनुमान लगाना पड़ता है।"
+                )
+
+            elif intent == "pfz_explanation":
+                body = (
+                    f"🧠 **मल्टी-एजेंट स्पष्टीकरण: INNOWAVE ने इस मत्स्य क्षेत्र की सिफारिश क्यों की?**:\n\n"
+                    f"१. 🌿 **प्रचुर क्लोरोफिल**: यहाँ क्लोरोफिल **{chloro_val} मि.ग्रा./घन मीटर** है, जो मछलियों का मुख्य भोजन है।\n"
+                    f"२. 🌡️ **थर्मल अपवेलिंग**: यहाँ **{sst_val}°C** का तापमान पोषक तत्वों को सतह पर लाता है।\n"
+                    f"३. 🗺️ **महाद्वीपीय शेल्फ**: 25-60 मीटर की शेल्फ ढलान मछलियों को प्राकृतिक रूप से एकत्र करती है।\n"
+                    f"४. 🛡️ **मौसम व सीमा सुरक्षा**: यह क्षेत्र अंतरराष्ट्रीय सीमा से **{region_data['gis']['distance_to_imbl']} किमी** दूर पूर्ण सुरक्षित है।\n"
+                    f"५. 👥 **सामुदायिक पुष्टि**: स्थानीय मछुआरों ने इस क्षेत्र में अच्छी पकड़ की पुष्टि की है।"
+                )
+
+            else:
+                body = (
+                    f"🛰️ **{reg_name_hi} समुद्री सूचना सारांश**:\n\n"
+                    f"• **क्लोरोफिल व तापमान**: क्लोरोफिल **{chloro_val} mg/m³**, तापमान **{sst_val}°C**।\n"
+                    f"• **अपेक्षित मछलियाँ**: {', '.join(species_info.get('primary_hi', ['बांगड़ा', 'सार्डिन']))}\n"
+                    f"• **सुरक्षा स्थिति**: **{danger_hi}** (खतरा स्कोर: {total_risk}/100, हवा: {wind_val} नॉट, लहरें: {wave_val} मीटर)।"
+                )
+
+            final_answer = body
+
+        else: # Marathi
+            if intent == "safety":
+                if danger_level == "SAFE":
+                    verdict_banner = f"✅ **होय, आज {reg_name_mr} जवळ समुद्रात मासेमारीला जाणे पूर्णपणे सुरक्षित आहे.**"
+                    verdict_reason = f"हवामान आणि सागरी स्थिती पूर्णपणे अनुकूल आहे. वाऱ्याचा वेग **{wind_val} नॉट्स ({wind_kmh} किमी/तास)** दिशा {region_data['weather']['wind_direction']} असून लाटांची उंची केवळ **{wave_val} मीटर** ({region_data['ocean'].get('sea_state_mr', region_data['ocean']['sea_state'])}) आहे."
+                elif danger_level == "CAUTION":
+                    verdict_banner = f"⚠️ **आज {reg_name_mr} जवळ समुद्रात जाताना विशेष सावधगिरी बाळगावी.**"
+                    verdict_reason = f"किनाऱ्याजवळ ३-५ सागरी मैलांपर्यंत स्थिती नियंत्रणात आहे, मात्र खुल्या समुद्रात **{wave_val} मीटर** उसळणाऱ्या लाटा आणि **{region_data['weather']['wind_gusts']} नॉट्स** वाऱ्याचे झोत आहेत."
+                else:
+                    verdict_banner = f"🚫 **नाही, आज {reg_name_mr} जवळ समुद्रात जाणे अत्यंत धोकादायक आणि असुरक्षित आहे.**"
+                    verdict_reason = f"खराब हवामानामुळे समुद्रात **{wave_val} मीटर** उंच लाटा आणि **{region_data['weather']['wind_gusts']} नॉट्स** वेगाचे वादळी वारे वाहत आहेत."
+
+                body = (
+                    f"{verdict_banner}\n\n"
+                    f"{verdict_reason} एकूण धोका निर्देशांक **{total_risk}/100 ({danger_mr})** असून हवेचा दाब **{region_data['weather']['barometric_pressure']} hPa** वर स्थिर आहे.\n\n"
+                    f"हे क्षेत्र आंतरराष्ट्रीय सागरी सीमेपासून (IMBL) **{region_data['gis']['distance_to_imbl']} किमी सुरक्षित अंतरावर** आहे. सर्व खलाशांनी लाईफ जॅकेट घालावे आणि VHF मरीन रेडिओ चॅनेल १६ वर सुरू ठेवावा."
+                )
+
+            elif intent == "danger_index_explanation":
+                body = (
+                    f"🧠 **धोका निर्देशांक (DANGER INDEX) चे सविस्तर वैज्ञानिक स्पष्टीकरण: {total_risk}/100 ({danger_mr})**\n\n"
+                    f"सध्या **{reg_name_mr}** भागातील धोका निर्देशांक **{total_risk}/100** निश्चित करण्यात आला आहे. याची ४ मुख्य वैज्ञानिक कारणे खालीलप्रमाणे आहेत:\n\n"
+                    f"१. 💨 **वाऱ्याचा धोका घटक ({round(wind_risk, 1)} / ३५ गुण)**: वाऱ्याचा वेग **{wind_val} नॉट्स ({wind_kmh} किमी/तास)** आणि झोत **{region_data['weather']['wind_gusts']} नॉट्स** च्या आधारे.\n"
+                    f"२. 🌊 **लाटांचा उसळी घटक ({round(wave_risk, 1)} / ३५ गुण)**: लाटांची उंची **{wave_val} मीटर** आणि **{region_data['ocean']['swell_period']} सेकंद** उसळी कालावधीच्या आधारे.\n"
+                    f"३. 🌐 **सागरी सीमा सुरक्षा ({round(gis_risk, 1)} / ३० गुण)**: आंतरराष्ट्रीय सीमेपासून **{region_data['gis']['distance_to_imbl']} किमी** सुरक्षित.\n"
+                    f"४. 👥 **मच्छीमार नोंदी व अलर्ट ({community_risk_mod:+d} गुण)**: स्थानिक बंदरातील ताज्या नोंदींनुसार.\n\n"
+                    f"**निष्कर्ष**: {total_risk}/100 चा निर्देशांक दर्शवतो की सध्या समुद्रातील स्थिती **{danger_mr}** वर्गात आहे."
+                )
+
+            elif intent in ["species_expected", "fish_general"]:
+                exp_species_list = ", ".join(species_info.get("primary_mr", species_info.get("primary", ["बांगडा", "पापलेट", "सुरमई", "टुना"])))
+                body = (
+                    f"🐟 **{reg_name_mr} जवळ मिळणारे अपेक्षित मासे ({time_ctx['mr'] if time_ctx['mr'] else 'या आठवड्यात'})**\n\n"
+                    f"या आठवड्यात **{reg_name_mr}** किनारपट्टी व मध्य-शेल्फ भागात प्रामुख्याने **{exp_species_list}** मुबलक मिळण्याची शक्यता आहे.\n\n"
+                    f"• **योग्य खोली व अधिवास**: महाद्वीपीय शेल्फवर **{species_info.get('depth_range_mr', '२० - ५५ मीटर')}** खोलीच्या पट्ट्यात माशांचे मोठे थवे फिरत आहेत.\n"
+                    f"• **सागरी परिस्थिती**: उपग्रहाद्वारे क्लोरोफिलचे प्रमाण **{chloro_val} mg/m³** आणि समुद्राचे तापमान **{sst_val}°C** नोंदवले गेले आहे, ज्यामुळे किनाऱ्यापासून २०-३५ किमी अंतरावर उत्तम थर्मल फ्रंट तयार झाला आहे.\n"
+                    f"• **योग्य जाळे व पद्धत**: पहाटेच्या भरतीवेळी **{species_info.get('gear_mr', 'ट्रोलिंग लाईन्स व मोठे ड्रिफ्ट जाळे')}** वापरल्यास भरपूर मासळी मिळेल.\n"
+                    f"• **अंदाजे बाजारभाव**: सध्या गोदीतील लिलाव भाव **सुरमई: ₹६००-८५०/किलो, टुना: ₹२४०-३८०/किलो, बांगडा: ₹१४०-२२०/किलो** चालू आहेत."
+                )
+
+            elif intent == "timing":
+                body = (
+                    f"⏰ **{reg_name_mr} साठी मासेमारी व बोट सोडण्याची सर्वोत्तम वेळ**\n\n"
+                    f"**{reg_name_mr}** परिसरासाठी {time_ctx['mr'] if time_ctx['mr'] else 'उद्या सकाळी'} मासेमारीची सर्वात अनुकूल वेळ **{species_info.get('catch_window_mr', 'पहाटे ०४:३० ते सकाळी ०८:३० वाजेपर्यंत')}** आहे, जेव्हा भरतीच्या प्रवाहामुळे मासे पृष्ठभागावर येतात.\n\n"
+                    f"• **शांत पाण्याचा कालावधी (Slack Window)**: बंदर सोडण्यासाठी सर्वात शांत पाण्याची वेळ **{region_data['tide'].get('slack_window_mr', region_data['tide']['slack_window'])}** आहे, ज्यामुळे सँडबार चॅनेलमध्ये बोट हेलकावे खात नाही.\n"
+                    f"• **भरती-ओहोटी वेळापत्रक**: पहिली भरती **{region_data['tide']['high_tide_1']}** वाजता व पहिली ओहोटी **{region_data['tide']['low_tide_1']}** वाजता असून **{region_data['tide']['sandbar_clearance_m']} मीटर सुरक्षित खोली** उपलब्ध आहे.\n"
+                    f"• **हवामान**: सकाळी ०९:०० वाजेपूर्वी वारे (**{wind_val} नॉट्स**) आणि लाटा (**{wave_val}m**) सर्वात शांत राहतील."
+                )
+
+            elif intent == "trip_advisory":
+                if total_risk < 40:
+                    verdict_banner = "✅ **होय, उद्या मासेमारीसाठी हवामान आणि समुद्राची स्थिती अनुकूल आहे.**"
+                    verdict_sub = "हवामान, वारे आणि लाटांची परिस्थिती पूर्णपणे सुरक्षित मर्यादेत आहे."
+                elif total_risk < 70:
+                    verdict_banner = "⚠️ **सावधगिरी: उद्या केवळ किनाऱ्याजवळच्या भागातच मासेमारी करा.**"
+                    verdict_sub = "किनाऱ्याजवळ स्थिती सामान्य आहे, पण खोल समुद्रात उसळणाऱ्या लाटांचा धोका संभवतो."
+                else:
+                    verdict_banner = "🚫 **धोका: खराब हवामानामुळे उद्या समुद्रात जाणे पूर्णपणे टाळा.**"
+                    verdict_sub = "समुद्रात वादळी वारे आणि उंच लाटांचा धोका आहे."
+
+                body = (
+                    f"{verdict_banner}\n{verdict_sub}\n\n"
+                    f"📊 **{reg_name_mr} साठी सविस्तर विश्लेषण**:\n\n"
+                    f"१. 🌤️ **हवामान व वारे**: वाऱ्याचा वेग **{wind_val} नॉट्स ({wind_kmh} किमी/तास)**, झोत **{region_data['weather']['wind_gusts']} नॉट्स**, हवेचा दाब **{region_data['weather']['barometric_pressure']} hPa** ({cond_mr})।\n"
+                    f"२. 🌊 **लाटा व समुद्राची स्थिती**: लाटांची उंची **{wave_val} मीटर** ({region_data['ocean'].get('sea_state_mr', region_data['ocean']['sea_state'])}) व प्रवाह {region_data['ocean']['current_speed']} नॉट्स.\n"
+                    f"३. ⏳ **भरती व प्रस्थान वेळ**: भरती {region_data['tide']['high_tide_1']} | शांत प्रस्थान वेळ **{region_data['tide'].get('slack_window_mr', region_data['tide']['slack_window'])}**.\n"
+                    f"४. 📋 **सुरक्षा नियम**: सर्वांसाठी लाईफ जॅकेट, VHF चॅनेल १६ तपासणी व तटरक्षक हेल्पलाईन **{region_data['emergency']['coast_guard_helpline']}** सोबत ठेवा."
+                )
+
+            elif intent == "species_profile":
+                sp_key = target_species if target_species else "tuna"
+                prof = species_profiles.get(sp_key) or GLOBAL_SPECIES_PROFILES.get(sp_key) or GLOBAL_SPECIES_PROFILES["tuna"]
+                body = (
+                    f"🐟 **लक्षित मासा सविस्तर मार्गदर्शक: {prof.get('name_mr', prof.get('name', 'मासा'))}** (*{prof.get('scientific', '')}*)\n\n"
+                    f"• 📍 **स्थान व अंतर**: {prof.get('location_mr', prof.get('hotspot', 'किनाऱ्यापासून २५-६० किमी खोल समुद्रात शेल्फ कडेवर'))}.\n"
+                    f"• 📏 **अनुकूल खोली**: **{prof.get('depth_mr', prof.get('depth', '३० - ८० मीटर'))}** खोल पाण्याच्या थरात.\n"
+                    f"• 🪱 **चारा व आमिष**: {prof.get('bait_mr', prof.get('bait', 'ताजी तारली, बांगडा, स्क्विड'))} व **{prof.get('gear_mr', prof.get('gear', 'लाँगलाईन व पृष्ठभागावरील ट्रोलिंग'))}** वायर लीडर्ससह.\n"
+                    f"• 🌤️ **हवामान व तापमान**: {prof.get('weather_mr', 'हलकी हवा ८-१४ नॉट्स, स्वच्छ पाणी')} आणि तापमान **{prof.get('temp_opt', '२७.०°C - २९.५°C')}** (सध्याचे तापमान: {sst_val}°C).\n"
+                    f"• 💰 **बाजारभाव**: अंदाजे लिलाव भाव **{prof.get('market_price_mr', prof.get('market_price', '₹२४० - ₹३८० प्रति किलो'))}**; १:१ बर्फात साठवा."
+                )
+
+            elif intent == "small_boat_safety":
+                body = (
+                    f"🛡️ **लहान बोट सुरक्षा विश्लेषण (वाऱ्याचा वेग: २५ किमी/तास / १३.५ नॉट्स)**:\n\n"
+                    f"⚠️ **थेट निष्कर्ष: अत्यंत सावधगिरी बाळगा — २५ किमी/तास वाऱ्यात लहान बोटीने खोल समुद्रात जाणे सुरक्षित नाही.**\n\n"
+                    f"१. 🌊 **लाटांचा धोका**: २५ किमी/तास वाऱ्यामुळे **१.२ ते १.८ मीटर** उंच उसळणाऱ्या लाटा निर्माण होतात, ज्यामुळे लहान फायबर (FRP) बोटींमध्ये पाणी शिरण्याचा धोका संभवतो.\n"
+                    f"२. ⚠️ **असंतुलनाचा धोका**: लाटांच्या काटकोनात जाळे ओढताना बोट उलटण्याचा किंवा इंजिन बंद पडण्याचा धोका असतो.\n"
+                    f"३. 📍 **सुरक्षित मर्यादा**: किनाऱ्याजवळ (**३ ते ५ सागरी मैल / ५-८ किमी अंतरात**) राहा; खोल समुद्रात अजिबात जाऊ नका.\n"
+                    f"४. 🛡️ **सुरक्षा उपकरणे**: लाईफ जॅकेट अनिवार्य वापरा आणि तटरक्षक दल हेल्पलाईन **{region_data['emergency']['coast_guard_helpline']}** लक्षात ठेवा."
+                )
+
+            elif intent == "pfz_discrepancy":
+                body = (
+                    f"🔍 **उपग्रह PFZ अंदाज आणि प्रत्यक्ष मासे मिळण्यात फरक का असू शकतो?**:\n\n"
+                    f"१. ⏱️ **डेटाचा वेळेतील अंतर (१२-२४ तास)**: प्रवाहामुळे प्लवक ५ ते १५ किमी वाहून जातो.\n"
+                    f"२. 🌊 **पृष्ठभाग विरुद्ध खोल पाणी**: उपग्रह वरचा १ मिमी थर मोजतो, तर मासे २०-६० मीटर खोल थरात असतात.\n"
+                    f"३. 🦐 **अन्न साखळीतील हालचाल**: शिकारी मासे प्लवकच्या मागे ५-१० किमी पुढे निघून जातात.\n"
+                    f"४. 🚤 **बोटींचा आवाज**: इंजिनच्या आवाजाने मासे खोलवर पळून जातात.\n"
+                    f"५. ☁️ **ढगाळ हवामान**: ढगांमुळे उपग्रह डेटाचा अंदाजित वापर करावा लागतो."
+                )
+
+            elif intent == "pfz_explanation":
+                body = (
+                    f"🧠 **मल्टी-एजंट स्पष्टीकरण: INNOWAVE ने हे मासेमारी क्षेत्र का निवडले?**:\n\n"
+                    f"१. 🌿 **प्लवक विपुलता**: येथे क्लोरोफिल **{chloro_val} mg/m³** असून माशांचे मुबलक खाद्य उपलब्ध आहे.\n"
+                    f"२. 🌡️ **थर्मल अपवेलिंग**: **{sst_val}°C** तापमानाची थर्मल फ्रंट सीमा पोषक द्रव्ये वर आणते.\n"
+                    f"३. 🗺️ **महाद्वीपीय शेल्फ**: २५-६० मीटरचा शेल्फ उतार माशांना नैसर्गिकरित्या एकत्र करतो.\n"
+                    f"४. 🛡️ **हवामान व सीमा सुरक्षा**: हे क्षेत्र आंतरराष्ट्रीय सीमेपासून **{region_data['gis']['distance_to_imbl']} किमी** पूर्ण सुरक्षित आहे.\n"
+                    f"५. 👥 **मच्छीमार नोंदी**: स्थानिक नोंदींनी या भागात उत्तम मासेमारीची पुष्टी केली आहे."
+                )
+
+            else:
+                body = (
+                    f"🛰️ **{reg_name_mr} सागरी माहिती अहवाल**:\n\n"
+                    f"• **क्लोरोफिल व तापमान**: क्लोरोफिल **{chloro_val} mg/m³**, तापमान **{sst_val}°C**.\n"
+                    f"• **अपेक्षित मासे**: {', '.join(species_info.get('primary_mr', ['बांगडा', 'तारली']))}\n"
+                    f"• **सुरक्षा रेटिंग**: **{danger_mr}** (धोका निर्देशांक: {total_risk}/100, वारे: {wind_val} नॉट्स, लाटा: {wave_val} मीटर)."
+                )
+
+            final_answer = body
 
     trace.append({
         "agent": "Brain Agent",
@@ -1349,7 +1152,16 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
         "agreement_badge": agreement_badge,
         "agreement_explanation": agreement_explanation,
         "risk_level": danger_level,
+        "metrics": {
+            "danger_score": total_risk,
+            "wind_knots": wind_val,
+            "wave_height_m": wave_val,
+            "chlorophyll": chloro_val,
+            "sst": sst_val
+        },
         "region": location_key,
-        "detected_intent": intent
+        "detected_intent": intent,
+        "llm_status": "llm_success" if llm_response else "offline_agent_synthesis",
+        "llm_error": llm_error
     }
 

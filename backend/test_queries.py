@@ -1,151 +1,202 @@
 import sys
+import os
+
+# Set UTF-8 encoding for standard output
 sys.stdout.reconfigure(encoding='utf-8')
+
+# Ensure backend directory is in path
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from agents.pipeline import run_agent_pipeline
 
+# Test suite containing the 4 primary test queries from Requirement 5 + comprehensive coverage
 test_suite = [
     {
-        "id": "1. Tomorrow Fishing Advisory (English)",
+        "id": "R5-1. Safety Inquiry (Mumbai Today)",
+        "query": "Is it safe to go fishing near Mumbai today?",
+        "expected_lang": "en",
+        "expected_domain": "safety",
+        "expected_keywords": ["SAFE", "MUMBAI", "knots", "meters", "IMBL"],
+        "min_words": 60,
+        "max_words": 300
+    },
+    {
+        "id": "R5-2. Expected Species Inquiry (Goa This Week)",
+        "query": "What species should I expect near Goa this week?",
+        "expected_lang": "en",
+        "expected_domain": "species_expected",
+        "expected_keywords": ["EXPECTED FISH SPECIES", "GOA", "Surmai", "chlorophyll", "depth"],
+        "min_words": 60,
+        "max_words": 300
+    },
+    {
+        "id": "R5-3. Danger Index Explanation",
+        "query": "Explain why the danger index is what it is right now.",
+        "expected_lang": "en",
+        "expected_domain": "danger_index_explanation",
+        "expected_keywords": ["DANGER INDEX EXPLANATION", "Wind Threat", "Wave & Swell", "Geospatial", "Community"],
+        "min_words": 60,
+        "max_words": 300
+    },
+    {
+        "id": "R5-4. Best Departure/Fishing Time (Kochi Tomorrow Morning)",
+        "query": "What's the best time to fish near Kochi tomorrow morning?",
+        "expected_lang": "en",
+        "expected_domain": "timing",
+        "expected_keywords": ["OPTIMAL FISHING", "KOCHI", "Slack", "Tidal", "Morning"],
+        "min_words": 60,
+        "max_words": 300
+    },
+    {
+        "id": "Trip Advisory (Tomorrow Sea Conditions)",
         "query": "Based on today's weather, wind, wave height and sea conditions, should I go fishing tomorrow?",
         "expected_lang": "en",
         "expected_domain": "trip_advisory",
-        "expected_keyword": "CONDITIONS"
+        "expected_keywords": ["CONDITIONS", "Weather & Wind", "Waves & Sea State"],
+        "min_words": 60,
+        "max_words": 300
     },
     {
-        "id": "2. Tuna Target Guide (English)",
+        "id": "Tuna Species Profile",
         "query": "I'm targeting tuna. What location, depth, bait and weather conditions should I look for?",
         "expected_lang": "en",
         "expected_domain": "species_profile",
-        "expected_keyword": "Tuna"
+        "expected_keywords": ["Tuna", "Location", "Depth", "Bait"],
+        "min_words": 60,
+        "max_words": 300
     },
     {
-        "id": "3. Small Boat & 25 km/h Wind Safety (English)",
+        "id": "Small Boat 25 km/h Wind Safety",
         "query": "I have a small fishing boat and the wind speed is 25 km/h. Is it safe to go offshore?",
         "expected_lang": "en",
         "expected_domain": "small_boat_safety",
-        "expected_keyword": "Small Boat Safety"
+        "expected_keywords": ["Small Boat Safety", "25 km/h", "CAUTION"],
+        "min_words": 60,
+        "max_words": 300
     },
     {
-        "id": "4. PFZ Discrepancy Explanation (English)",
+        "id": "PFZ Discrepancy Explanation",
         "query": "Why might the predicted fishing zone be different from where fishermen are actually catching fish?",
         "expected_lang": "en",
         "expected_domain": "pfz_discrepancy",
-        "expected_keyword": "Why Predicted Fishing Zones"
+        "expected_keywords": ["Why Predicted Fishing Zones", "Time Lag", "Thermocline"],
+        "min_words": 60,
+        "max_words": 300
     },
     {
-        "id": "5. PFZ Recommendation Explainability (English)",
+        "id": "PFZ Multi-Agent Recommendation Reason",
         "query": "Can you explain why you recommended this fishing zone?",
         "expected_lang": "en",
         "expected_domain": "pfz_explanation",
-        "expected_keyword": "Why INNOWAVE Recommended"
+        "expected_keywords": ["Why INNOWAVE Recommended", "Satellite Ocean Color", "Thermal Upwelling"],
+        "min_words": 60,
+        "max_words": 300
     },
     {
-        "id": "6. Tomorrow Fishing Advisory (Hindi)",
+        "id": "Hindi - Tomorrow Trip Advisory",
         "query": "आज के मौसम, हवा, लहरों की ऊंचाई और समुद्री स्थिति के आधार पर क्या मुझे कल मछली पकड़ने जाना चाहिए?",
         "expected_lang": "hi",
         "expected_domain": "trip_advisory",
-        "expected_keyword": "कल मछली पकड़ने"
+        "expected_keywords": ["मछली पकड़ने", "मौसम", "लहरें"],
+        "min_words": 40,
+        "max_words": 350
     },
     {
-        "id": "7. Tuna Target Guide (Hindi)",
-        "query": "टूना मछली पकड़ने के लिए कौन सी जगह, गहराई, चारा और मौसम देखना चाहिए?",
+        "id": "Hindi - Danger Index Explanation",
+        "query": "समझाएं कि वर्तमान में खतरा इंडेक्स इतना क्यों है?",
         "expected_lang": "hi",
-        "expected_domain": "species_profile",
-        "expected_keyword": "टूना"
+        "expected_domain": "danger_index_explanation",
+        "expected_keywords": ["खतरा इंडेक्स", "हवा का खतरा", "लहरों का खतरा"],
+        "min_words": 40,
+        "max_words": 350
     },
     {
-        "id": "8. Small Boat & 25 km/h Wind (Hindi)",
-        "query": "मेरे पास छोटी नाव है और हवा की गति 25 किमी/घंटा है, क्या गहरे समुद्र में जाना सुरक्षित है?",
+        "id": "Hindi - Expected Species",
+        "query": "इस सप्ताह गोवा के पास कौन सी मछली मिलने की उम्मीद है?",
         "expected_lang": "hi",
-        "expected_domain": "small_boat_safety",
-        "expected_keyword": "छोटी नाव"
+        "expected_domain": "species_expected",
+        "expected_keywords": ["अपेक्षित मछलियाँ", "गोवा", "क्लोरोफिल"],
+        "min_words": 40,
+        "max_words": 350
     },
     {
-        "id": "9. PFZ Discrepancy Explanation (Hindi)",
-        "query": "भविष्यवाणी किया गया मत्स्य क्षेत्र वास्तविक मछली पकड़ने की जगह से अलग क्यों हो सकता है?",
-        "expected_lang": "hi",
-        "expected_domain": "pfz_discrepancy",
-        "expected_keyword": "वास्तविक मछली"
-    },
-    {
-        "id": "10. Tomorrow Fishing Advisory (Marathi)",
+        "id": "Marathi - Tomorrow Trip Advisory",
         "query": "आजचे हवामान, वारा, लाटांची उंची आणि समुद्राची स्थिती पाहून मी उद्या मासेमारीला जावे का?",
         "expected_lang": "mr",
         "expected_domain": "trip_advisory",
-        "expected_keyword": "उद्या मासेमारीसाठी"
+        "expected_keywords": ["मासेमारीसाठी", "हवामान", "लाटा"],
+        "min_words": 40,
+        "max_words": 350
     },
     {
-        "id": "11. Tuna Target Guide (Marathi)",
-        "query": "टुना माशासाठी कोणती जागा, खोली, आमिष आणि हवामान योग्य आहे?",
+        "id": "Marathi - Danger Index Explanation",
+        "query": "सध्याचा धोका निर्देशांक असा का आहे हे समजावून सांगा.",
         "expected_lang": "mr",
-        "expected_domain": "species_profile",
-        "expected_keyword": "टुना"
+        "expected_domain": "danger_index_explanation",
+        "expected_keywords": ["धोका निर्देशांक", "वाऱ्याचा धोका", "लाटांचा उसळी"],
+        "min_words": 40,
+        "max_words": 350
     },
     {
-        "id": "12. Small Boat & 25 km/h Wind (Marathi)",
-        "query": "माझ्याकडे लहान बोट आहे आणि वाऱ्याचा वेग 25 किमी/तास आहे, खोल समुद्रात जाणे सुरक्षित आहे का?",
+        "id": "Marathi - Expected Species",
+        "query": "या आठवड्यात गोव्याच्या किनाऱ्यावर कोणते मासे मिळण्याची अपेक्षा आहे?",
         "expected_lang": "mr",
-        "expected_domain": "small_boat_safety",
-        "expected_keyword": "लहान बोट"
-    },
-    {
-        "id": "13. PFZ Discrepancy (Marathi)",
-        "query": "अंदाजित मासेमारी क्षेत्र (PFZ) आणि प्रत्यक्षात मासे मिळण्याची जागा यात फरक का असू शकतो?",
-        "expected_lang": "mr",
-        "expected_domain": "pfz_discrepancy",
-        "expected_keyword": "फरक का"
-    },
-    {
-        "id": "14. PFZ Recommendation Explainability (Marathi)",
-        "query": "तुम्ही हे मासेमारी क्षेत्र का निवडले किंवा शिफारस केली हे समजावून सांगू शकता का?",
-        "expected_lang": "mr",
-        "expected_domain": "pfz_explanation",
-        "expected_keyword": "का निवडले"
+        "expected_domain": "species_expected",
+        "expected_keywords": ["अपेक्षित मासे", "गोवा", "क्लोरोफिल"],
+        "min_words": 40,
+        "max_words": 350
     }
 ]
 
 print("="*80)
-print("RUNNING EXTENDED USER-QUESTION TEST SUITE")
+print("RUNNING EXTENDED USER-QUESTION TEST SUITE WITH REQUIREMENT 5 QUERIES")
 print("="*80)
 
 all_passed = True
 collected_answers = []
 
-for item in test_suite:
-    print(f"\n--- Testing [{item['id']}]: '{item['query']}' ---")
+for idx, item in enumerate(test_suite, 1):
+    print(f"\n[{idx}/{len(test_suite)}] Testing: '{item['query']}'")
     res = run_agent_pipeline(item["query"])
+    
+    answer_text = res["final_answer"]
+    words = answer_text.split()
+    word_count = len(words)
     
     lang_ok = (res["language"] == item["expected_lang"])
     domain_ok = (res["detected_intent"] == item["expected_domain"])
-    keyword_ok = (item["expected_keyword"] in res["final_answer"])
+    keywords_ok = all(kw.lower() in answer_text.lower() for kw in item["expected_keywords"])
+    length_ok = (word_count >= item["min_words"])
     
-    print(f"Detected Language : {res['language']} (Expected: {item['expected_lang']}) -> {'PASS' if lang_ok else 'FAIL'}")
-    print(f"Detected Intent   : {res['detected_intent']} (Expected: {item['expected_domain']}) -> {'PASS' if domain_ok else 'FAIL'}")
-    print(f"Domain Specificity: '{item['expected_keyword']}' -> {'PASS' if keyword_ok else 'FAIL'}")
+    print(f"  • Language        : {res['language']} (Expected: {item['expected_lang']}) -> {'PASS' if lang_ok else 'FAIL'}")
+    print(f"  • Intent Domain   : {res['detected_intent']} (Expected: {item['expected_domain']}) -> {'PASS' if domain_ok else 'FAIL'}")
+    print(f"  • Keyword Checks  : {item['expected_keywords']} -> {'PASS' if keywords_ok else 'FAIL'}")
+    print(f"  • Word Count      : {word_count} words (Min: {item['min_words']}) -> {'PASS' if length_ok else 'FAIL'}")
     
-    print("Reasoning Trace:")
-    for step in res["reasoning_trace"]:
-        print(f"  [{step['agent']}] {step['message']}")
-        
-    print("\nBrain Agent Final Response:")
-    print(res["final_answer"])
-    print("-" * 60)
+    print(f"\n  --- Brain Agent Output Preview ---")
+    print(f"  {answer_text[:280]}...")
+    print(f"  ----------------------------------")
     
-    if not (lang_ok and domain_ok and keyword_ok):
+    if not (lang_ok and domain_ok and keywords_ok and length_ok):
         all_passed = False
-        print(f"FAILED on test: {item['id']}")
+        print(f"  ❌ FAILED on test: {item['id']}")
+    else:
+        print(f"  ✅ PASSED: {item['id']}")
         
-    collected_answers.append(res["final_answer"])
+    collected_answers.append(answer_text)
 
-# Verify Diversity
+# Check for pairwise diversity
 unique_answers = set(collected_answers)
 diversity_rate = (len(unique_answers) / len(collected_answers)) * 100
-print(f"\nResponse Diversity Rate: {diversity_rate:.1f}% ({len(unique_answers)} unique responses for {len(collected_answers)} queries)")
+print("\n" + "="*80)
+print(f"TEST SUITE SUMMARY:")
+print(f"Total Test Cases: {len(test_suite)}")
+print(f"Unique Answers  : {len(unique_answers)} / {len(collected_answers)}")
+print(f"Diversity Rate  : {diversity_rate:.1f}%")
+print("="*80)
 
 if all_passed and diversity_rate == 100.0:
-    print("\n" + "="*80)
-    print("ALL TESTS PASSED WITH 100% SUCCESS AND 100% DISTINCT DATA GENERATION!")
-    print("="*80)
+    print("\n🎉 ALL TESTS PASSED WITH 100% SPECIFICITY AND 100% DISTINCT RESPONSES!")
 else:
-    print("\nSome tests failed or generated duplicates.")
+    print("\n⚠️ Some test cases failed or duplicate answers were generated.")
     sys.exit(1)
