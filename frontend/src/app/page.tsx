@@ -131,6 +131,7 @@ export default function HomeDashboard() {
     lon?: number;
     timestamp: string;
     sos_id?: string;
+    diagnostics?: any;
   } | null>(null);
 
   // Load telemetry from online API or fallback directly into IndexedDB
@@ -1367,6 +1368,36 @@ export default function HomeDashboard() {
                       Open Device SMS App
                     </a>
                   </div>
+
+                  {/* Diagnostics / Twilio Status Audit */}
+                  {smsReceipt?.diagnostics && (
+                    <div className="bg-slate-100/80 border border-slate-200 p-2.5 rounded-xl text-[10px] font-mono space-y-1">
+                      <div className="flex items-center justify-between text-slate-800 font-bold">
+                        <span>📡 Live SMS Gateway Diagnostics:</span>
+                        <span className={smsReceipt.diagnostics.twilio_success ? "text-emerald-700 font-extrabold" : (smsReceipt.diagnostics.twilio_error_code ? "text-rose-700 font-extrabold" : "text-amber-700")}>
+                          {smsReceipt.diagnostics.twilio_success ? "TWILIO DISPATCHED" : (smsReceipt.diagnostics.twilio_error_code ? `TWILIO ERROR ${smsReceipt.diagnostics.twilio_error_code}` : "SIMULATION ACTIVE")}
+                        </span>
+                      </div>
+                      <div className="text-slate-600 space-y-0.5 text-[9.5px]">
+                        <div>Formatted E.164 Phone: <strong className="text-slate-900">{smsReceipt.diagnostics.target_phone_formatted || smsReceipt.recipient_phone}</strong></div>
+                        <div>Twilio SID (Masked): <span className="text-slate-800">{smsReceipt.diagnostics.env_check?.account_sid_masked || "NOT SET"}</span></div>
+                        <div>Twilio Sender: <span className="text-slate-800">{smsReceipt.diagnostics.env_check?.phone_number_masked || "NOT SET"}</span></div>
+                        {smsReceipt.diagnostics.twilio_sid && (
+                          <div className="text-emerald-800 font-bold">Twilio Message SID: {smsReceipt.diagnostics.twilio_sid} (Status: {smsReceipt.diagnostics.twilio_status})</div>
+                        )}
+                        {smsReceipt.diagnostics.twilio_error_message && (
+                          <div className="text-rose-800 font-semibold bg-rose-50 p-1.5 rounded-lg border border-rose-200 mt-1">
+                            ⚠️ Twilio Error [{smsReceipt.diagnostics.twilio_error_code || "FAIL"}]: {smsReceipt.diagnostics.twilio_error_message}
+                            {smsReceipt.diagnostics.twilio_more_info && (
+                              <a href={smsReceipt.diagnostics.twilio_more_info} target="_blank" rel="noreferrer" className="block text-blue-800 underline mt-0.5 font-bold">
+                                View Twilio Error Documentation ↗
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Re-broadcast updated coordinates button if vessel moves */}
                   <button

@@ -1,5 +1,31 @@
 import { NextRequest, NextResponse } from "next/server";
 
+function maskCredential(val?: string, prefixLen = 4, suffixLen = 4): string {
+  if (!val) return "MISSING / NOT SET";
+  const clean = val.trim();
+  if (!clean) return "EMPTY STRING";
+  if (clean.length <= prefixLen + suffixLen) return `SET (length ${clean.length})`;
+  return `${clean.slice(0, prefixLen)}...${clean.slice(-suffixLen)} (length ${clean.length})`;
+}
+
+function formatE164Phone(phoneStr: string): string {
+  const raw = String(phoneStr || "").trim();
+  const digits = raw.replace(/\D/g, "");
+
+  if (raw.startsWith("+")) {
+    return `+${digits}`;
+  }
+
+  // If 10 digits without country code, default to India (+91)
+  if (digits.length === 10) {
+    return `+91${digits}`;
+  } else if (digits.length > 10) {
+    return `+${digits}`;
+  } else {
+    return `+91${digits}`;
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -32,25 +58,67 @@ export async function POST(req: NextRequest) {
 
     let provider = "INNOWAVE Marine Cellular & Satellite SMS Gateway";
     let gateway_id = `SMS-GW-${Math.floor(100000 + Math.random() * 900000)}`;
-    let delivery_status = "DELIVERED";
+    let delivery_status = "DELIVERED (SIMULATED)";
 
-    // 1. Check Twilio integration
-    const twilioSid = process.env.TWILIO_ACCOUNT_SID;
-    const twilioAuth = process.env.TWILIO_AUTH_TOKEN;
-    const twilioFrom = process.env.TWILIO_PHONE_NUMBER;
+    // Step 4: Confirm environment variables at runtime with masked values
+    const twilioSid = (process.env.TWILIO_ACCOUNT_SID || "").trim();
+    const twilioAuth = (process.env.TWILIO_AUTH_TOKEN || "").trim();
+    const twilioFrom = (process.env.TWILIO_PHONE_NUMBER || "").trim();
+
+    const maskedSid = maskCredential(twilioSid, 4, 4);
+    const maskedAuth = maskCredential(twilioAuth, 2, 2);
+    const maskedFrom = maskCredential(twilioFrom, 3, 4);
+
+    console.log(
+      `[TWILIO-ENV-CHECK] Runtime Status: ` +
+      `TWILIO_ACCOUNT_SID=${maskedSid}, ` +
+      `TWILIO_AUTH_TOKEN=${maskedAuth}, ` +
+      `TWILIO_PHONE_NUMBER=${maskedFrom}`
+    );
+
+    const diagnostics: any = {
+      env_check: {
+        account_sid_present: Boolean(twilioSid),
+        auth_token_present: Boolean(twilioAuth),
+        phone_number_present: Boolean(twilioFrom),
+        account_sid_masked: maskedSid,
+        phone_number_masked: maskedFrom,
+        all_credentials_set: Boolean(twilioSid && twilioAuth && twilioFrom)
+      },
+      target_phone_raw: recipient_phone,
+      target_phone_formatted: null,
+      twilio_attempted: false,
+      twilio_success: false,
+      twilio_sid: null,
+      twilio_status: null,
+      twilio_error_code: null,
+      twilio_error_message: null,
+      twilio_more_info: null,
+      http_status: null
+    };
+
+    // Step 1: Format and log exact recipient phone number right before sending
+    const formattedRecipient = formatE164Phone(recipient_phone);
+    diagnostics.target_phone_formatted = formattedRecipient;
 
     if (twilioSid && twilioAuth && twilioFrom) {
-      try {
-        let cleanPhone = recipient_phone.trim();
-        if (!cleanPhone.startsWith("+")) {
-          cleanPhone = "+91" + cleanPhone.replace(/\s+/g, "");
-        }
+      diagnostics.twilio_attempted = true;
+      console.log(
+        `[TWILIO-PRE-SEND] Dispatching Live SOS SMS:\n` +
+        `  ➡️ To (Formatted E.164): ${formattedRecipient} (Raw: ${recipient_phone})\n` +
+        `  ⬅️ From (Twilio Sender): ${twilioFrom}\n` +
+        `  🔑 Account SID: ${maskedSid}\n` +
+        `  📝 Message Length: ${sms_text.length} chars`
+      );
 
+      try {
         const authStr = Buffer.from(`${twilioSid}:${twilioAuth}`).toString("base64");
         const formParams = new URLSearchParams();
-        formParams.append("To", cleanPhone);
+        formParams.append("To", formattedRecipient);
         formParams.append("From", twilioFrom);
         formParams.append("Body", sms_text);
+
+        console.log(`[TWILIO-DISPATCH] Sending POST to https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json...`);
 
         const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${twilioSid}/Messages.json`, {
           method: "POST",
@@ -61,19 +129,72 @@ export async function POST(req: NextRequest) {
           body: formParams.toString()
         });
 
+        const twData = await twilioRes.json().catch(() => ({}));
+
         if (twilioRes.ok) {
-          const twData = await twilioRes.json();
+          // Step 3: Log Twilio message SID and status immediately after success
+          console.log(
+            `[TWILIO-SUCCESS] Twilio SMS dispatched successfully!\n` +
+            `  ✅ Message SID: ${twData.sid}\n` +
+            `  📊 Status: ${twData.status}\n` +
+            `  📱 To: ${twData.to}\n` +
+            `  📞 From: ${twData.from}\n` +
+            `  📅 Date Created: ${twData.date_created}`
+          );
           provider = "Twilio Cloud SMS Gateway";
           gateway_id = twData.sid || `TW-${Math.floor(100000 + Math.random() * 900000)}`;
+          delivery_status = twData.status ? String(twData.status).toUpperCase() : "DELIVERED";
+
+          diagnostics.twilio_success = true;
+          diagnostics.twilio_sid = twData.sid;
+          diagnostics.twilio_status = twData.status;
+          diagnostics.http_status = twilioRes.status;
+        } else {
+          // Step 2: Log full Twilio exception including error code and message
+          const errCode = twData.code;
+          const errMsg = twData.message || twilioRes.statusText || "Twilio request failed";
+          const errMore = twData.more_info || "";
+
+          console.error(
+            `[TWILIO-ERROR] Twilio API Rejected SMS Dispatch!\n` +
+            `  ❌ HTTP Status: ${twilioRes.status} (${twilioRes.statusText})\n` +
+            `  ⚠️ Twilio Error Code: ${errCode}\n` +
+            `  📝 Error Message: ${errMsg}\n` +
+            `  🔗 More Info: ${errMore}\n` +
+            `  📱 Recipient Attempted: ${formattedRecipient}\n` +
+            `  📞 Sender: ${twilioFrom}\n` +
+            `  📄 Raw Twilio Response:`, twData
+          );
+
+          diagnostics.twilio_error_code = errCode;
+          diagnostics.twilio_error_message = errMsg;
+          diagnostics.twilio_more_info = errMore;
+          diagnostics.http_status = twilioRes.status;
         }
-      } catch (ex) {
-        console.warn("Twilio SMS dispatch attempt note:", ex);
+      } catch (ex: any) {
+        // Step 2: Catch network/client exception
+        console.error(
+          `[TWILIO-EXCEPTION] Exception during Twilio SMS dispatch:\n` +
+          `  ❌ Type: ${ex?.name || "Error"}\n` +
+          `  📝 Message: ${ex?.message || ex}\n` +
+          `  📱 Target: ${formattedRecipient}`,
+          ex
+        );
+        diagnostics.twilio_error_message = ex?.message || String(ex);
       }
+    } else {
+      console.warn(
+        `[TWILIO-CONFIG-WARNING] Twilio SMS skipped: Environment variables are not fully configured.\n` +
+        `  TWILIO_ACCOUNT_SID: ${maskedSid}\n` +
+        `  TWILIO_AUTH_TOKEN: ${maskedAuth}\n` +
+        `  TWILIO_PHONE_NUMBER: ${maskedFrom}\n` +
+        `  👉 To send live SMS, set these variables in Vercel or your local .env.`
+      );
     }
 
-    // 2. Check Fast2SMS integration
-    const fast2smsKey = process.env.FAST2SMS_API_KEY;
-    if (fast2smsKey && provider.startsWith("INNOWAVE")) {
+    // 2. Check Fast2SMS integration as secondary live gateway
+    const fast2smsKey = (process.env.FAST2SMS_API_KEY || "").trim();
+    if (fast2smsKey && !diagnostics.twilio_success) {
       try {
         const cleanNum = recipient_phone.replace(/\D/g, "").slice(-10);
         const f2sParams = new URLSearchParams();
@@ -93,9 +214,10 @@ export async function POST(req: NextRequest) {
           const f2sData = await f2sRes.json();
           provider = "Fast2SMS India Gateway";
           gateway_id = `F2S-${f2sData.request_id || Math.floor(100000 + Math.random() * 900000)}`;
+          delivery_status = "DELIVERED";
         }
       } catch (ex) {
-        console.warn("Fast2SMS dispatch attempt note:", ex);
+        console.warn("[FAST2SMS-ERROR] Fast2SMS dispatch note:", ex);
       }
     }
 
@@ -115,9 +237,11 @@ export async function POST(req: NextRequest) {
       region,
       danger_score,
       timestamp,
-      sos_id
+      sos_id,
+      diagnostics
     });
   } catch (err: any) {
+    console.error("[SOS-SERVERLESS-ERROR] Failed to dispatch SOS SMS:", err);
     return NextResponse.json({ error: "Failed to dispatch SOS SMS", details: err.message }, { status: 500 });
   }
 }

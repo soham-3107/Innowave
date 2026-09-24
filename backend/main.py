@@ -258,46 +258,223 @@ def post_report_endpoint(req: ReportRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+import logging
+import urllib.error
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("innowave_sos")
+
+def mask_credential(val: Optional[str], prefix_len: int = 4, suffix_len: int = 4) -> str:
+    if not val:
+        return "MISSING / NOT SET"
+    clean = str(val).strip()
+    if len(clean) == 0:
+        return "EMPTY STRING"
+    if len(clean) <= (prefix_len + suffix_len):
+        return f"SET (length {len(clean)})"
+    return f"{clean[:prefix_len]}...{clean[-suffix_len:]} (length {len(clean)})"
+
+def format_e164_phone(phone_str: str) -> str:
+    """
+    Formats a phone number to standard E.164 format (+[country_code][national_number]).
+    Removes spaces, parentheses, dashes. Defaults to India (+91) if 10 digits without country code.
+    """
+    raw = str(phone_str).strip()
+    digits = ''.join(c for c in raw if c.isdigit())
+    
+    if raw.startswith("+"):
+        return f"+{digits}"
+    
+    if len(digits) == 10:
+        return f"+91{digits}"
+    elif len(digits) > 10:
+        return f"+{digits}"
+    else:
+        return f"+91{digits}"
+
 def dispatch_live_sms(to_phone: str, message: str) -> dict:
     """
-    Attempts live cellular SMS transmission if Twilio or Fast2SMS credentials exist.
-    Otherwise gracefully uses high-reliability simulated gateway receipt.
+    Dispatches emergency distress SMS via Twilio or Fast2SMS with full diagnostics and error inspection.
     """
-    twilio_sid = os.environ.get("TWILIO_ACCOUNT_SID")
-    twilio_auth = os.environ.get("TWILIO_AUTH_TOKEN")
-    twilio_from = os.environ.get("TWILIO_PHONE_NUMBER")
+    twilio_sid = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
+    twilio_auth = os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
+    twilio_from = os.environ.get("TWILIO_PHONE_NUMBER", "").strip()
+
+    # Step 4: Masked environment variable audit
+    masked_sid = mask_credential(twilio_sid, 4, 4)
+    masked_auth = mask_credential(twilio_auth, 2, 2)
+    masked_from = mask_credential(twilio_from, 3, 4)
+
+    logger.info(
+        f"[TWILIO-ENV-CHECK] Runtime Environment Status: "
+        f"TWILIO_ACCOUNT_SID={masked_sid}, "
+        f"TWILIO_AUTH_TOKEN={masked_auth}, "
+        f"TWILIO_PHONE_NUMBER={masked_from}"
+    )
+
+    diagnostics = {
+        "env_check": {
+            "account_sid_present": bool(twilio_sid),
+            "auth_token_present": bool(twilio_auth),
+            "phone_number_present": bool(twilio_from),
+            "account_sid_masked": masked_sid,
+            "phone_number_masked": masked_from,
+            "all_credentials_set": bool(twilio_sid and twilio_auth and twilio_from)
+        },
+        "target_phone_raw": to_phone,
+        "target_phone_formatted": None,
+        "twilio_attempted": False,
+        "twilio_success": False,
+        "twilio_sid": None,
+        "twilio_status": None,
+        "twilio_error_code": None,
+        "twilio_error_message": None,
+        "twilio_more_info": None,
+        "http_status": None
+    }
+
+    # Step 1: Format and log exact recipient phone number right before sending
+    formatted_recipient = format_e164_phone(to_phone)
+    diagnostics["target_phone_formatted"] = formatted_recipient
 
     if twilio_sid and twilio_auth and twilio_from:
+        diagnostics["twilio_attempted"] = True
+        logger.info(
+            f"[TWILIO-PRE-SEND] Dispatching Live SOS SMS:\n"
+            f"  ➡️ To (Formatted E.164): {formatted_recipient} (Raw: {to_phone})\n"
+            f"  ⬅️ From (Twilio Sender): {twilio_from}\n"
+            f"  🔑 Account SID: {masked_sid}\n"
+            f"  📝 Message Length: {len(message)} chars"
+        )
+
         try:
-            url = f"https://api.twilio.com/2010-04-01/Accounts/{twilio_sid}/Messages.json"
-            auth_str = f"{twilio_sid}:{twilio_auth}"
-            auth_b64 = base64.b64encode(auth_str.encode('ascii')).decode('ascii')
-            
-            clean_phone = to_phone.strip()
-            if not clean_phone.startswith("+"):
-                clean_phone = "+91" + clean_phone.replace(" ", "")
+            # 1. Try python twilio package if installed
+            try:
+                from twilio.rest import Client
+                twilio_client = Client(twilio_sid, twilio_auth)
+                logger.info("[TWILIO-DISPATCH] Invoking Twilio SDK client.messages.create()...")
+                tw_msg = twilio_client.messages.create(
+                    body=message,
+                    from_=twilio_from,
+                    to=formatted_recipient
+                )
+                
+                # Step 3: Log Twilio message SID and status immediately
+                logger.info(
+                    f"[TWILIO-SUCCESS] Twilio SMS dispatched successfully via SDK!\n"
+                    f"  ✅ Message SID: {tw_msg.sid}\n"
+                    f"  📊 Status: {tw_msg.status}\n"
+                    f"  📱 To: {tw_msg.to}\n"
+                    f"  📞 From: {tw_msg.from_}\n"
+                    f"  📅 Date Created: {tw_msg.date_created}"
+                )
+                diagnostics["twilio_success"] = True
+                diagnostics["twilio_sid"] = tw_msg.sid
+                diagnostics["twilio_status"] = tw_msg.status
 
-            data = urllib.parse.urlencode({
-                "To": clean_phone,
-                "From": twilio_from,
-                "Body": message
-            }).encode('utf-8')
-
-            req = urllib.request.Request(url, data=data, method="POST")
-            req.add_header("Authorization", f"Basic {auth_b64}")
-            req.add_header("Content-Type", "application/x-www-form-urlencoded")
-
-            with urllib.request.urlopen(req, timeout=8) as resp:
-                result = json.loads(resp.read().decode('utf-8'))
                 return {
-                    "provider": "Twilio Cloud SMS Gateway",
-                    "delivery_status": "DELIVERED",
-                    "gateway_id": result.get("sid", f"TW-{random.randint(100000, 999999)}")
+                    "provider": "Twilio Cloud SMS Gateway (SDK)",
+                    "delivery_status": "DELIVERED" if tw_msg.status in ["delivered", "sent", "queued"] else str(tw_msg.status).upper(),
+                    "gateway_id": tw_msg.sid,
+                    "diagnostics": diagnostics
                 }
-        except Exception as ex:
-            print(f"[SOS-SMS-DISPATCH] Twilio dispatch note: {ex}")
+            except ImportError:
+                # Direct REST API fallback with urllib
+                url = f"https://api.twilio.com/2010-04-01/Accounts/{twilio_sid}/Messages.json"
+                auth_str = f"{twilio_sid}:{twilio_auth}"
+                auth_b64 = base64.b64encode(auth_str.encode('ascii')).decode('ascii')
 
-    fast2sms_key = os.environ.get("FAST2SMS_API_KEY")
+                data = urllib.parse.urlencode({
+                    "To": formatted_recipient,
+                    "From": twilio_from,
+                    "Body": message
+                }).encode('utf-8')
+
+                req = urllib.request.Request(url, data=data, method="POST")
+                req.add_header("Authorization", f"Basic {auth_b64}")
+                req.add_header("Content-Type", "application/x-www-form-urlencoded")
+
+                logger.info(f"[TWILIO-DISPATCH] Executing POST request to {url}...")
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    resp_body = resp.read().decode('utf-8')
+                    result = json.loads(resp_body)
+                    
+                    sid = result.get("sid", "UNKNOWN")
+                    status = result.get("status", "queued")
+                    
+                    # Step 3: Log Twilio message SID and status immediately
+                    logger.info(
+                        f"[TWILIO-SUCCESS] Twilio SMS dispatched successfully via REST API!\n"
+                        f"  ✅ Message SID: {sid}\n"
+                        f"  📊 Status: {status}\n"
+                        f"  📱 To: {result.get('to')}\n"
+                        f"  📞 From: {result.get('from')}\n"
+                        f"  📅 Date Created: {result.get('date_created')}"
+                    )
+                    diagnostics["twilio_success"] = True
+                    diagnostics["twilio_sid"] = sid
+                    diagnostics["twilio_status"] = status
+
+                    return {
+                        "provider": "Twilio Cloud SMS Gateway (REST)",
+                        "delivery_status": "DELIVERED" if status in ["delivered", "sent", "queued"] else str(status).upper(),
+                        "gateway_id": sid,
+                        "diagnostics": diagnostics
+                    }
+        except urllib.error.HTTPError as http_err:
+            # Step 2: Catch HTTP error and log full Twilio exception with code and message
+            err_code = None
+            err_msg = str(http_err)
+            err_more = ""
+            try:
+                err_body = http_err.read().decode('utf-8')
+                err_json = json.loads(err_body)
+                err_code = err_json.get("code")
+                err_msg = err_json.get("message", err_msg)
+                err_more = err_json.get("more_info", "")
+            except Exception:
+                err_json = {"raw": str(http_err)}
+
+            logger.error(
+                f"[TWILIO-ERROR] Twilio API Rejected SMS Dispatch!\n"
+                f"  ❌ HTTP Status: {http_err.code} ({http_err.reason})\n"
+                f"  ⚠️ Twilio Error Code: {err_code}\n"
+                f"  📝 Error Message: {err_msg}\n"
+                f"  🔗 More Info: {err_more}\n"
+                f"  📱 Recipient Attempted: {formatted_recipient}\n"
+                f"  📞 Sender: {twilio_from}\n"
+                f"  📄 Raw Twilio Response: {err_json}"
+            )
+            diagnostics["twilio_error_code"] = err_code
+            diagnostics["twilio_error_message"] = err_msg
+            diagnostics["twilio_more_info"] = err_more
+            diagnostics["http_status"] = http_err.code
+
+        except Exception as ex:
+            # Step 2: Log general exceptions
+            err_code = getattr(ex, "code", None)
+            err_msg = getattr(ex, "msg", str(ex))
+            logger.error(
+                f"[TWILIO-EXCEPTION] Exception during Twilio SMS dispatch:\n"
+                f"  ❌ Exception Type: {type(ex).__name__}\n"
+                f"  ⚠️ Code: {err_code}\n"
+                f"  📝 Message: {err_msg}\n"
+                f"  📱 Target: {formatted_recipient}",
+                exc_info=True
+            )
+            diagnostics["twilio_error_code"] = err_code
+            diagnostics["twilio_error_message"] = str(ex)
+    else:
+        logger.warning(
+            f"[TWILIO-CONFIG-WARNING] Twilio SMS skipped: Environment variables are not fully configured.\n"
+            f"  TWILIO_ACCOUNT_SID: {masked_sid}\n"
+            f"  TWILIO_AUTH_TOKEN: {masked_auth}\n"
+            f"  TWILIO_PHONE_NUMBER: {masked_from}\n"
+            f"  👉 To send live SMS, set these variables in backend environment."
+        )
+
+    # 2. Check Fast2SMS integration as secondary live provider
+    fast2sms_key = os.environ.get("FAST2SMS_API_KEY", "").strip()
     if fast2sms_key:
         try:
             url = "https://www.fast2sms.com/dev/bulkV2"
@@ -321,15 +498,20 @@ def dispatch_live_sms(to_phone: str, message: str) -> dict:
                 return {
                     "provider": "Fast2SMS India Gateway",
                     "delivery_status": "DELIVERED",
-                    "gateway_id": f"F2S-{result.get('request_id', random.randint(100000, 999999))}"
+                    "gateway_id": f"F2S-{result.get('request_id', random.randint(100000, 999999))}",
+                    "diagnostics": diagnostics
                 }
         except Exception as ex:
-            print(f"[SOS-SMS-DISPATCH] Fast2SMS dispatch note: {ex}")
+            logger.warning(f"[FAST2SMS-ERROR] Fast2SMS dispatch note: {ex}")
+
+    sim_id = f"SMS-GW-{random.randint(100000, 999999)}"
+    logger.info(f"[SMS-GATEWAY] Using resilient INNOWAVE simulated gateway receipt: {sim_id}")
 
     return {
-        "provider": "INNOWAVE Marine Cellular & Satellite SMS Gateway",
-        "delivery_status": "DELIVERED",
-        "gateway_id": f"SMS-GW-{random.randint(100000, 999999)}"
+        "provider": "INNOWAVE Marine Cellular & Satellite SMS Gateway (Simulation)",
+        "delivery_status": "DELIVERED (SIMULATED)",
+        "gateway_id": sim_id,
+        "diagnostics": diagnostics
     }
 
 @app.post("/api/sos/sms")
@@ -368,10 +550,13 @@ def send_sos_sms_endpoint(req: SosSmsRequest):
             "region": req.region,
             "danger_score": req.danger_score,
             "timestamp": req.timestamp,
-            "sos_id": req.sos_id
+            "sos_id": req.sos_id,
+            "diagnostics": dispatch_result.get("diagnostics")
         }
     except Exception as e:
+        logger.error(f"[SOS-ENDPOINT-ERROR] Failed to process SOS SMS endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.get("/api/map")
