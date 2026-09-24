@@ -420,7 +420,7 @@ export default function ResearchModePage() {
   // Sync active location from localStorage and header changes
   useEffect(() => {
     const updateLocation = () => {
-      const saved = localStorage.getItem("innowave-active-location") || localStorage.getItem("orca-active-location");
+      const saved = localStorage.getItem("innowave-active-location");
       if (saved && REGION_NAMES[saved]) {
         setActiveLocation(saved);
       }
@@ -437,11 +437,9 @@ export default function ResearchModePage() {
     };
 
     window.addEventListener("innowave-location-changed", handleCustomLocation);
-    window.addEventListener("orca-location-changed", handleCustomLocation);
     window.addEventListener("storage", updateLocation);
     return () => {
       window.removeEventListener("innowave-location-changed", handleCustomLocation);
-      window.removeEventListener("orca-location-changed", handleCustomLocation);
       window.removeEventListener("storage", updateLocation);
     };
   }, []);
@@ -450,9 +448,7 @@ export default function ResearchModePage() {
   const handleLocationChange = (loc: string) => {
     setActiveLocation(loc);
     localStorage.setItem("innowave-active-location", loc);
-    localStorage.setItem("orca-active-location", loc);
     window.dispatchEvent(new CustomEvent("innowave-location-changed", { detail: loc }));
-    window.dispatchEvent(new CustomEvent("orca-location-changed", { detail: loc }));
     setImportedStatus(null);
   };
 

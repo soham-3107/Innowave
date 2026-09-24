@@ -17,12 +17,17 @@ import {
   Users,
   Volume2,
   Square,
-  VolumeX
+  VolumeX,
+  HardDrive,
+  WifiOff
 } from "lucide-react";
 
 import { REGION_SPECIES, GLOBAL_SPECIES_PROFILES } from "@/data/speciesData";
+import { getCoastalRegionData } from "@/utils/indexedDb";
+import { usePWA } from "@/context/PWAContext";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
 
 interface Message {
   sender: "user" | "innowave";
@@ -247,6 +252,7 @@ const LOCAL_REPORTS = [
 
 export default function CopilotPage() {
   const [query, setQuery] = useState("");
+  const { isOffline, lastSyncTime } = usePWA();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -1045,23 +1051,49 @@ export default function CopilotPage() {
 
     try {
       let res: Response | null = null;
+      let data: any = null;
+
+      // 1. Try relative Next.js API route /api/chat (always on same origin)
       try {
-        res = await fetch(`${API_BASE_URL}/api/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: messageText })
-        });
-      } catch {
-        // If external API_BASE_URL fails, try relative /api/chat
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
         res = await fetch(`/api/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: messageText })
+          body: JSON.stringify({ message: messageText }),
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
+        if (res && res.ok) {
+          data = await res.json();
+        }
+      } catch (e) {
+        console.warn("Relative /api/chat endpoint attempt:", e);
       }
-      
-      if (!res || !res.ok) throw new Error("API error");
-      const data = await res.json();
+
+      // 2. If relative route did not produce data, try external API_BASE_URL (if different)
+      if (!data && API_BASE_URL) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+          res = await fetch(`${API_BASE_URL}/api/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: messageText }),
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          if (res && res.ok) {
+            data = await res.json();
+          }
+        } catch (e) {
+          console.warn("External API_BASE_URL /api/chat attempt:", e);
+        }
+      }
+
+      if (!data || (!data.final_answer && !data.text)) {
+        throw new Error("No network API response, switching to local multi-agent intelligence");
+      }
 
       setMessages(prev => [...prev, {
         sender: "innowave",
@@ -1078,29 +1110,26 @@ export default function CopilotPage() {
       }
 
     } catch (err) {
-      console.warn("Backend API not reachable. Running client agent network simulation.", err);
-      const simulatedResult = runLocalAgentSimulation(messageText);
+      console.warn("Engaging local/offline multi-agent intelligence engine:", err);
 
-      setTimeout(() => {
-        setMessages(prev => [...prev, {
-          sender: "innowave",
-          text: simulatedResult.final_answer,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }]);
-        setReasoningTrace(simulatedResult.reasoning_trace);
-        setDangerScore(simulatedResult.danger_score);
-        setConfidenceScore(simulatedResult.confidence_score);
-        setAgentAgreement(simulatedResult.agent_agreement);
+      const localResult = runLocalAgentSimulation(messageText);
 
-        if (simulatedResult.region) {
-          localStorage.setItem("innowave-active-location", simulatedResult.region);
-        }
-      }, 1500);
+      setMessages(prev => [...prev, {
+        sender: "innowave",
+        text: localResult.final_answer,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }]);
+      setReasoningTrace(localResult.reasoning_trace || []);
+      setDangerScore(localResult.danger_score ?? null);
+      setConfidenceScore(localResult.confidence_score ?? null);
+      setAgentAgreement(localResult.agent_agreement ?? null);
+
+      if (localResult.region) {
+        localStorage.setItem("innowave-active-location", localResult.region);
+      }
 
     } finally {
-      setTimeout(() => {
-        setLoading(false);
-      }, 1500);
+      setLoading(false);
     }
   };
 
@@ -1131,13 +1160,25 @@ export default function CopilotPage() {
     <div className="p-6 max-w-7xl mx-auto flex flex-col gap-6 text-slate-800">
       
       {/* Intro Header */}
-      <div className="bg-white border border-stone-200 p-4 rounded-xl flex items-center gap-3 shadow-sm">
-        <BrainCircuit className="text-blue-900 h-8 w-8 flex-shrink-0" />
-        <div>
-          <h2 className="font-bold text-blue-955">AI Copilot & Multi-Agent Network</h2>
-          <p className="text-xs text-slate-500 leading-normal">
-            Converse with the agent network in Hindi, Marathi, or English. Multi-agent collaborative reasoning automatically delivers specialized data for specific fish species, net/gear types, market rates, ocean swells, tides, Coast Guard helplines, and safety.
-          </p>
+      <div className="bg-white border border-stone-200 p-4 rounded-xl flex items-center justify-between gap-3 shadow-sm">
+        <div className="flex items-center gap-3">
+          <BrainCircuit className="text-blue-900 h-8 w-8 flex-shrink-0" />
+          <div>
+            <h2 className="font-bold text-blue-955 flex flex-wrap items-center gap-2">
+              AI Copilot & Multi-Agent Network
+              {isOffline && (
+                <span className="text-[10px] px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-900 font-bold uppercase tracking-wider font-mono flex items-center gap-1">
+                  <HardDrive className="h-3 w-3" />
+                  Offline Cached Intelligence Active
+                </span>
+              )}
+            </h2>
+            <p className="text-xs text-slate-500 leading-normal">
+              {isOffline
+                ? `You are currently offline. Querying cached safety parameters and regional intelligence from local offline cache (Last synced: ${lastSyncTime || "earlier"}).`
+                : "Converse with the agent network in Hindi, Marathi, or English. Multi-agent collaborative reasoning automatically delivers specialized data for specific fish species, net/gear types, market rates, ocean swells, tides, Coast Guard helplines, and safety."}
+            </p>
+          </div>
         </div>
       </div>
 

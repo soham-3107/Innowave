@@ -1,3 +1,4 @@
+import sys
 import re
 import os
 import json
@@ -6,6 +7,18 @@ import logging
 import urllib.request
 import urllib.error
 from typing import Dict, Any, List, Optional, Tuple
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 from agents.mock_data import MOCK_REGIONS, get_closest_region, COMMUNITY_REPORTS, GLOBAL_SPECIES_PROFILES
 
 logger = logging.getLogger("innowave_brain_agent")
@@ -392,8 +405,18 @@ def call_llm_api_if_configured(system_prompt: str, user_prompt: str, user_query:
         f"USER PROMPT:\n{user_prompt}\n"
         f"============================================================"
     )
-    logger.info("%s", full_prompt_log)
-    print(f"\n[Brain Agent] Final Prompt string sent to LLM:\n{full_prompt_log}\n")
+    try:
+        logger.info("%s", full_prompt_log)
+    except Exception:
+        pass
+
+    try:
+        print(f"\n[Brain Agent] Final Prompt string sent to LLM:\n{full_prompt_log}\n")
+    except Exception:
+        try:
+            print(f"\n[Brain Agent] Final Prompt string sent to LLM:\n{full_prompt_log.encode('ascii', 'backslashreplace').decode('ascii')}\n")
+        except Exception:
+            pass
 
     openai_key = os.environ.get("OPENAI_API_KEY")
     gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")

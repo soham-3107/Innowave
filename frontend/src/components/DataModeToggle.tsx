@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { Info, Radio, Activity } from "lucide-react";
@@ -16,7 +16,7 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
   // Initialize and sync across tabs/components
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("innowave-data-mode") || localStorage.getItem("orca-data-mode") || "simulated";
+      const saved = localStorage.getItem("innowave-data-mode") || "simulated";
       if (saved === "simulated" || saved === "live") {
         setDataMode(saved);
       }
@@ -28,11 +28,9 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
       };
 
       window.addEventListener("innowave-datamode-changed", handleModeChange);
-      window.addEventListener("orca-datamode-changed", handleModeChange);
 
       return () => {
         window.removeEventListener("innowave-datamode-changed", handleModeChange);
-        window.removeEventListener("orca-datamode-changed", handleModeChange);
       };
     }
   }, []);
@@ -56,9 +54,7 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
     setDataMode(mode);
     if (typeof window !== "undefined") {
       localStorage.setItem("innowave-data-mode", mode);
-      localStorage.setItem("orca-data-mode", mode);
       window.dispatchEvent(new CustomEvent("innowave-datamode-changed", { detail: mode }));
-      window.dispatchEvent(new CustomEvent("orca-datamode-changed", { detail: mode }));
     }
   };
 

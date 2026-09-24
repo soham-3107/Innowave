@@ -11,8 +11,13 @@ import {
   Database, 
   Check, 
   RefreshCw, 
-  RotateCcw 
+  RotateCcw,
+  ShieldAlert,
+  Smartphone,
+  User,
+  Phone
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -20,42 +25,57 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+  const { user, updateProfile } = useAuth();
+
   const [speed, setSpeed] = useState("1x");
   const [unitSystem, setUnitSystem] = useState("nautical");
   const [audioAlerts, setAudioAlerts] = useState(true);
   const [autoSyncAgents, setAutoSyncAgents] = useState(true);
   const [apiUrl, setApiUrl] = useState("http://127.0.0.1:8000");
+
+  // Emergency contact fields (from signup)
+  const [emergencyContactName, setEmergencyContactName] = useState("");
+  const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
+
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const savedSpeed = localStorage.getItem("innowave-sim-speed") || localStorage.getItem("orca-sim-speed") || "1x";
-      const savedUnits = localStorage.getItem("innowave-units") || localStorage.getItem("orca-units") || "nautical";
-      const savedAudio = (localStorage.getItem("innowave-audio-alerts") || localStorage.getItem("orca-audio-alerts")) !== "false";
-      const savedSync = (localStorage.getItem("innowave-agent-sync") || localStorage.getItem("orca-agent-sync")) !== "false";
-      const savedApi = localStorage.getItem("innowave-api-url") || localStorage.getItem("orca-api-url") || (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000");
+      const savedSpeed = localStorage.getItem("innowave-sim-speed") || "1x";
+      const savedUnits = localStorage.getItem("innowave-units") || "nautical";
+      const savedAudio = (localStorage.getItem("innowave-audio-alerts")) !== "false";
+      const savedSync = (localStorage.getItem("innowave-agent-sync")) !== "false";
+      const savedApi = localStorage.getItem("innowave-api-url") || (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000");
 
       setSpeed(savedSpeed);
       setUnitSystem(savedUnits);
       setAudioAlerts(savedAudio);
       setAutoSyncAgents(savedSync);
       setApiUrl(savedApi);
+
+      if (user) {
+        setEmergencyContactName(user.emergency_contact_name || "");
+        setEmergencyContactPhone(user.emergency_contact_phone || "");
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, user]);
 
   if (!isOpen) return null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     localStorage.setItem("innowave-sim-speed", speed);
     localStorage.setItem("innowave-units", unitSystem);
     localStorage.setItem("innowave-audio-alerts", String(audioAlerts));
     localStorage.setItem("innowave-agent-sync", String(autoSyncAgents));
     localStorage.setItem("innowave-api-url", apiUrl);
-    localStorage.setItem("orca-sim-speed", speed);
-    localStorage.setItem("orca-units", unitSystem);
-    localStorage.setItem("orca-audio-alerts", String(audioAlerts));
-    localStorage.setItem("orca-agent-sync", String(autoSyncAgents));
-    localStorage.setItem("orca-api-url", apiUrl);
+
+    // Update emergency contact if changed
+    if (emergencyContactName.trim() && emergencyContactPhone.trim()) {
+      await updateProfile({
+        emergency_contact_name: emergencyContactName.trim(),
+        emergency_contact_phone: emergencyContactPhone.trim()
+      });
+    }
 
     setSavedSuccess(true);
     setTimeout(() => {
@@ -70,12 +90,16 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setAudioAlerts(true);
     setAutoSyncAgents(true);
     setApiUrl("http://127.0.0.1:8000");
+    if (user) {
+      setEmergencyContactName(user.emergency_contact_name || "");
+      setEmergencyContactPhone(user.emergency_contact_phone || "");
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-200">
       <div 
-        className="bg-white border border-stone-200 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden flex flex-col"
+        className="bg-white border border-stone-200 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -85,7 +109,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <Settings className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="font-extrabold text-blue-950 text-sm">Platform Preferences</h3>
+              <h3 className="font-extrabold text-blue-950 text-sm">Platform & Safety Settings</h3>
               <p className="text-[10px] text-slate-400 font-mono">INNOWAVE Marine Intelligence Suite</p>
             </div>
           </div>
@@ -98,7 +122,64 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 flex flex-col gap-4 text-xs">
+        <div className="p-6 flex flex-col gap-4 text-xs overflow-y-auto">
+          
+          {/* Emergency SOS Contact Section (From Signup) */}
+          <div className="bg-rose-50/70 border border-rose-200/90 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-rose-950 uppercase tracking-wider text-[11px] font-mono flex items-center gap-1.5">
+                <ShieldAlert className="h-4 w-4 text-rose-600" />
+                SOS Emergency Contact (from Signup)
+              </span>
+              <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-md font-mono">
+                SMS Target
+              </span>
+            </div>
+            <p className="text-[10.5px] text-slate-600 leading-relaxed">
+              When SOS distress is active, an automated SMS with your last known live GPS coordinates is dispatched to this contact.
+            </p>
+
+            <div className="space-y-2">
+              <div>
+                <label className="block text-[10.5px] font-bold text-slate-700 mb-1">
+                  Emergency Contact Name
+                </label>
+                <div className="flex items-center gap-2 bg-white border border-rose-200 rounded-xl px-3 py-1.5 focus-within:border-blue-900">
+                  <User className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={emergencyContactName}
+                    onChange={(e) => setEmergencyContactName(e.target.value)}
+                    placeholder="e.g. Sunita Patil (Wife)"
+                    className="w-full text-xs text-slate-900 bg-transparent focus:outline-none font-sans font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10.5px] font-bold text-slate-700 mb-1">
+                  Emergency Mobile Phone (10 Digits)
+                </label>
+                <div className="flex items-center gap-2 bg-white border border-rose-200 rounded-xl px-3 py-1.5 focus-within:border-blue-900">
+                  <Smartphone className="h-3.5 w-3.5 text-rose-600 flex-shrink-0" />
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
+                    value={emergencyContactPhone.replace(/\D/g, "").slice(-10)}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      setEmergencyContactPhone(digits ? `+91 ${digits}` : "");
+                    }}
+                    placeholder="9820198765"
+                    className="w-full text-xs text-slate-900 bg-transparent focus:outline-none font-mono font-bold"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Unit System */}
           <div className="flex flex-col gap-1.5">
             <label className="font-bold text-slate-700">Measurement Units</label>

@@ -13,6 +13,7 @@ frontend/out/
 # Environment configurations and logs
 .env
 *.log
+*.db
 .gemini/
 .system_generated/
 *.tsbuildinfo

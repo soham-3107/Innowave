@@ -15,9 +15,19 @@ import {
   BrainCircuit, 
   Radio,
   X,
-  Fish
+  Fish,
+  Download,
+  Wifi,
+  WifiOff,
+  HardDrive,
+  User,
+  LogIn,
+  LogOut,
+  Anchor
 } from "lucide-react";
 import DataModeToggle from "@/components/DataModeToggle";
+import { usePWA } from "@/context/PWAContext";
+import { useAuth } from "@/context/AuthContext";
 
 interface SidebarProps {
   onOpenSettings?: () => void;
@@ -28,6 +38,8 @@ interface SidebarProps {
 export default function Sidebar({ onOpenSettings, onCloseMobile, isMobile = false }: SidebarProps) {
   const pathname = usePathname();
   const [focusParam, setFocusParam] = useState<string | null>(null);
+  const { isOffline, isInstallable, isInstalled, installPWA, lastSyncTime } = usePWA();
+  const { user, isAuthenticated, logout } = useAuth();
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -82,6 +94,17 @@ export default function Sidebar({ onOpenSettings, onCloseMobile, isMobile = fals
     {
       title: "Workspace",
       items: [
+        ...(isInstallable && !isInstalled ? [{
+          label: "Install INNOWAVE App",
+          href: "#",
+          icon: <Download className="h-4 w-4 flex-shrink-0 text-amber-500 animate-bounce" />,
+          isAction: true,
+          badge: "PWA",
+          onClick: () => {
+            installPWA();
+            if (onCloseMobile) onCloseMobile();
+          }
+        }] : []),
         {
           label: "Settings",
           href: "#",
@@ -159,6 +182,11 @@ export default function Sidebar({ onOpenSettings, onCloseMobile, isMobile = fals
                           </span>
                           <span>{item.label}</span>
                         </div>
+                        {item.badge && (
+                          <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                            {item.badge}
+                          </span>
+                        )}
                       </button>
                     );
                   }
@@ -206,29 +234,87 @@ export default function Sidebar({ onOpenSettings, onCloseMobile, isMobile = fals
         </nav>
       </div>
 
-      {/* Sidebar Footer: Agent Network Status & Demo Badges */}
+      {/* Sidebar Footer: User Card + Agent Network Status & IndexedDB Storage Indicator */}
       <div className="p-3 border-t border-stone-200/80 bg-[#F9F7F4]/70 flex flex-col gap-2">
-        {/* Agent Network: Online */}
+        {/* Logged in User Tile or Sign In Button */}
+        {isAuthenticated && user ? (
+          <div className="bg-white border border-stone-200/90 p-2.5 rounded-xl shadow-xs flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-6 h-6 rounded-lg bg-blue-900 text-white font-bold flex items-center justify-center text-[10px] flex-shrink-0 shadow-2xs">
+                  {user.full_name.charAt(0).toUpperCase()}
+                </div>
+                <div className="truncate">
+                  <p className="text-xs font-bold text-blue-950 truncate leading-tight">{user.full_name}</p>
+                  <p className="text-[9.5px] font-mono text-slate-500 capitalize">{user.role}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  logout();
+                  if (onCloseMobile) onCloseMobile();
+                }}
+                title="Log out"
+                className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {user.role === "fisherman" && user.role_details?.boat_name && (
+              <div className="text-[10px] font-mono text-blue-900 bg-blue-50/80 px-2 py-0.5 rounded border border-blue-150 truncate">
+                🚢 {user.role_details.boat_name} ({user.role_details.boat_registration || "IND"})
+              </div>
+            )}
+          </div>
+        ) : (
+          <Link
+            href="/login"
+            onClick={onCloseMobile}
+            className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-850 hover:to-indigo-850 text-white py-2 px-3 rounded-xl text-xs font-bold shadow-xs transition-all"
+          >
+            <LogIn className="h-3.5 w-3.5" />
+            <span>Sign In / Register</span>
+          </Link>
+        )}
+
+        {/* Network & Local Cache Status */}
         <div className="flex items-center justify-between bg-white border border-stone-200/90 px-2.5 py-2 rounded-xl shadow-xs">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              {isOffline ? (
+                <>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                </>
+              ) : (
+                <>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </>
+              )}
             </span>
-            <span className="text-[11px] font-medium text-slate-600">Agent Network:</span>
+            <span className="text-[11px] font-medium text-slate-600">
+              {isOffline ? "Offshore Cache:" : "Agent Network:"}
+            </span>
           </div>
-          <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
-            Online
+          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+            isOffline 
+              ? "text-amber-800 bg-amber-50 border-amber-300" 
+              : "text-emerald-700 bg-emerald-50 border-emerald-200/60"
+          }`}>
+            {isOffline ? "Cached" : "Online"}
           </span>
         </div>
 
-        {/* Global Multi-Agent Sync / Demo Mode Badges */}
+        {/* Sync status metadata strip */}
         <div className="flex items-center justify-between px-1 text-[10px] font-mono text-slate-500">
           <div className="flex items-center gap-1.5">
-            <BrainCircuit className="h-3 w-3 text-blue-900" />
-            <span>Agent Sync</span>
+            <HardDrive className="h-3 w-3 text-blue-900" />
+            <span>Last Sync</span>
           </div>
-          <span className="text-blue-900 font-bold">Active</span>
+          <span className="text-blue-900 font-bold truncate max-w-[90px]" title={lastSyncTime}>
+            {lastSyncTime ? lastSyncTime.split(",")[1] || lastSyncTime : "Active"}
+          </span>
         </div>
 
         {/* Data Mode: Simulated | Live Labeled Toggle */}
@@ -237,3 +323,4 @@ export default function Sidebar({ onOpenSettings, onCloseMobile, isMobile = fals
     </aside>
   );
 }
+
