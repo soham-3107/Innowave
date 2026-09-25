@@ -20,8 +20,34 @@ from database import (
     update_user_profile,
     verify_password,
     create_access_token,
-    decode_access_token
+    decode_access_token,
+    log_data_access,
+    get_data_access_logs
 )
+
+def load_env_files():
+    """Loads environment variables from local .env files if not already set in os.environ."""
+    search_paths = [
+        os.path.join(os.path.dirname(__file__), ".env"),
+        os.path.join(os.path.dirname(__file__), "..", ".env"),
+        os.path.join(os.path.dirname(__file__), "..", "frontend", ".env.local"),
+        os.path.join(os.path.dirname(__file__), "..", "frontend", ".env"),
+    ]
+    for p in search_paths:
+        if os.path.isfile(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            k, v = k.strip(), v.strip().strip("'\"")
+                            if k and k not in os.environ:
+                                os.environ[k] = v
+            except Exception:
+                pass
+
+load_env_files()
 
 app = FastAPI(title="INNOWAVE Marine Intelligence API", version="2.0.0")
 
@@ -92,6 +118,30 @@ class SosSmsRequest(BaseModel):
     danger_score: int
     sos_id: str
     timestamp: str
+
+class LogAccessRequest(BaseModel):
+    user_id: Optional[int] = None
+    user_email: Optional[str] = None
+    user_role: str
+    action: str
+    resource_type: str
+    details: Optional[Dict[str, Any]] = None
+    ip_address: Optional[str] = None
+
+class ImblNotifyRequest(BaseModel):
+    vessel_name: Optional[str] = "Matsya Sagar IV"
+    vessel_registration: Optional[str] = "IND-MH-01-MM-4820"
+    operator_name: Optional[str] = "Capt. Rajesh Patil"
+    lat: float
+    lon: float
+    region: str
+    boundary_name: str
+    distance_nm: float
+    distance_km: float
+    alert_level: str
+    timestamp: str
+    authority_phone: Optional[str] = "+91 98110 99887"
+    authority_name: Optional[str] = "Indian Coast Guard Regional HQ"
 
 @app.get("/")
 def read_root():
@@ -277,9 +327,9 @@ def mask_credential(val: Optional[str], prefix_len: int = 4, suffix_len: int = 4
 def format_e164_phone(phone_str: str) -> str:
     """
     Formats a phone number to standard E.164 format (+[country_code][national_number]).
-    Removes spaces, parentheses, dashes. Defaults to India (+91) if 10 digits without country code.
+    Removes spaces, parentheses, dashes. Handles Indian 10, 11 (starting with 0), 12 (starting with 91) digit formats.
     """
-    raw = str(phone_str).strip()
+    raw = str(phone_str or "").strip()
     digits = ''.join(c for c in raw if c.isdigit())
     
     if raw.startswith("+"):
@@ -287,6 +337,10 @@ def format_e164_phone(phone_str: str) -> str:
     
     if len(digits) == 10:
         return f"+91{digits}"
+    elif len(digits) == 11 and digits.startswith("0"):
+        return f"+91{digits[1:]}"
+    elif len(digits) == 12 and digits.startswith("91"):
+        return f"+{digits}"
     elif len(digits) > 10:
         return f"+{digits}"
     else:
@@ -533,6 +587,10 @@ def send_sos_sms_endpoint(req: SosSmsRequest):
         )
         
         dispatch_result = dispatch_live_sms(req.recipient_phone, sms_text)
+        formatted_phone = format_e164_phone(req.recipient_phone)
+        wa_digits = ''.join(c for c in formatted_phone if c.isdigit())
+        direct_sms_uri = f"sms:{formatted_phone}?&body={urllib.parse.quote(sms_text)}"
+        whatsapp_url = f"https://api.whatsapp.com/send?phone={wa_digits}&text={urllib.parse.quote(sms_text)}"
         
         return {
             "status": "success",
@@ -540,11 +598,13 @@ def send_sos_sms_endpoint(req: SosSmsRequest):
             "gateway_id": dispatch_result.get("gateway_id", f"SMS-GW-{random.randint(100000, 999999)}"),
             "provider": dispatch_result.get("provider", "INNOWAVE Marine Cellular & Satellite SMS Gateway"),
             "recipient_name": req.recipient_name,
-            "recipient_phone": req.recipient_phone,
+            "recipient_phone": formatted_phone,
             "sender_name": req.sender_name,
             "vessel_name": req.vessel_name,
             "sms_text": sms_text,
             "maps_link": maps_link,
+            "direct_sms_uri": direct_sms_uri,
+            "whatsapp_url": whatsapp_url,
             "lat": req.lat,
             "lon": req.lon,
             "region": req.region,
@@ -555,6 +615,91 @@ def send_sos_sms_endpoint(req: SosSmsRequest):
         }
     except Exception as e:
         logger.error(f"[SOS-ENDPOINT-ERROR] Failed to process SOS SMS endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/security/log-access")
+def log_access_endpoint(req: LogAccessRequest):
+    """
+    Logs every view of sensitive IMBL coordinates or classified maritime telemetry into data_access_log.
+    """
+    try:
+        log_id = log_data_access(
+            user_id=req.user_id,
+            user_email=req.user_email,
+            user_role=req.user_role,
+            action=req.action,
+            resource_type=req.resource_type,
+            details=req.details,
+            ip_address=req.ip_address
+        )
+        return {"status": "logged", "log_id": log_id, "action": req.action}
+    except Exception as e:
+        logger.error(f"[SECURITY-LOG-ERROR] Failed to record data access log: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/security/logs")
+def get_security_logs_endpoint(limit: int = 50):
+    """
+    Returns audit trail from data_access_log table.
+    """
+    try:
+        logs = get_data_access_logs(limit=limit)
+        return {"status": "success", "count": len(logs), "logs": logs}
+    except Exception as e:
+        logger.error(f"[SECURITY-LOGS-GET-ERROR] Failed to fetch security logs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/imbl/notify")
+def notify_imbl_authorities_endpoint(req: ImblNotifyRequest):
+    """
+    Dispatches automated sensitive maritime boundary alert to Indian Coast Guard / Port Authorities via Twilio SMS.
+    """
+    try:
+        maps_link = f"https://maps.google.com/?q={req.lat:.5f},{req.lon:.5f}"
+        sms_text = (
+            f"🚨 [INNOWAVE IMBL SENSITIVE BOUNDARY ALERT]\n"
+            f"ENFORCEMENT NOTICE: Vessel {req.vessel_name} ({req.vessel_registration}) operated by {req.operator_name} "
+            f"is in close proximity to {req.boundary_name} ({req.distance_nm:.2f} NM / {req.distance_km:.2f} km).\n"
+            f"📍 GPS Coords: {req.lat:.5f}°N, {req.lon:.5f}°E ({req.region})\n"
+            f"🗺️ Live Chart: {maps_link}\n"
+            f"⏱️ Timestamp: {req.timestamp}\n"
+            f"⚠️ Severity: {req.alert_level}\n"
+            f"📡 Maritime Security & Coast Guard Operations Center (ROC) alerted."
+        )
+
+        # Dispatch to configured authority contact number via Twilio / Fast2SMS / Marine gateway
+        target_phone = req.authority_phone or "+91 98110 99887"
+        dispatch_result = dispatch_live_sms(target_phone, sms_text)
+
+        # Log this authority notification in data_access_log
+        log_data_access(
+            user_id=None,
+            user_email=req.operator_name,
+            user_role="system",
+            action="IMBL_AUTHORITY_NOTIFICATION_DISPATCHED",
+            resource_type="IMBL_SECURITY_TELEMETRY",
+            details={
+                "vessel": req.vessel_name,
+                "boundary": req.boundary_name,
+                "distance_nm": req.distance_nm,
+                "gateway_id": dispatch_result.get("gateway_id"),
+                "delivery_status": dispatch_result.get("delivery_status")
+            }
+        )
+
+        return {
+            "status": "success",
+            "authorities_notified": True,
+            "delivery_status": dispatch_result.get("delivery_status", "DELIVERED"),
+            "gateway_id": dispatch_result.get("gateway_id", f"IMBL-GW-{random.randint(100000, 999999)}"),
+            "provider": dispatch_result.get("provider", "INNOWAVE Marine Cellular & Satellite SMS Gateway"),
+            "sms_text": sms_text,
+            "authority_name": req.authority_name,
+            "authority_phone": target_phone,
+            "diagnostics": dispatch_result.get("diagnostics")
+        }
+    except Exception as e:
+        logger.error(f"[IMBL-NOTIFY-ERROR] Failed to notify IMBL authorities: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

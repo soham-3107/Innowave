@@ -23,9 +23,18 @@ import {
   Send,
   Radio,
   Copy,
-  Check
+  Check,
+  MessageCircle,
+  Phone,
+  Share2,
+  Edit3,
+  Save,
+  PhoneCall
 } from "lucide-react";
 import { REGION_SPECIES } from "@/data/speciesData";
+import { COASTAL_REGIONS, REGION_NAMES, REGION_DATA } from "@/data/coastalRegions";
+import { calculateDistanceToNearestIMBL, IMBLProximityResult } from "@/data/imblData";
+import ImblAlertBanner from "@/components/ImblAlertBanner";
 import DataModeToggle from "@/components/DataModeToggle";
 import { 
   saveCoastalRegionData, 
@@ -36,6 +45,56 @@ import { usePWA } from "@/context/PWAContext";
 import { useAuth } from "@/context/AuthContext";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+const REGION_VESSEL_PATHS: Record<string, [number, number][]> = {
+  mumbai: [
+    [18.940, 72.825],
+    [18.925, 72.820],
+    [18.910, 72.812],
+    [18.880, 72.780],
+    [18.840, 72.720],
+    [18.800, 72.650],
+    [18.760, 72.550],
+    [18.720, 72.480],
+    [18.700, 72.400]
+  ],
+  veraval: [
+    [20.910, 70.360],
+    [21.150, 69.850],
+    [21.420, 69.300],
+    [21.680, 68.750],
+    [21.840, 68.210], // Near India-Pakistan IMBL (3.42 NM -> Proximity Warning Alert!)
+    [21.920, 68.080],
+    [21.850, 68.180]
+  ],
+  chennai: [
+    [13.080, 80.300],
+    [12.850, 80.450],
+    [12.400, 80.350],
+    [11.800, 80.150],
+    [10.800, 79.950],
+    [10.120, 79.980] // Approaching India-Sri Lanka IMBL in Palk Strait
+  ],
+  kochi: [
+    [9.930, 76.150],
+    [9.850, 76.050],
+    [9.750, 75.920],
+    [9.600, 75.800],
+    [9.450, 75.700]
+  ],
+  goa: [
+    [15.490, 73.820],
+    [15.400, 73.700],
+    [15.300, 73.550],
+    [15.180, 73.400]
+  ],
+  vizag: [
+    [17.680, 83.300],
+    [17.550, 83.450],
+    [17.400, 83.600],
+    [17.250, 83.750]
+  ]
+};
 
 const MapComponent = dynamic(() => import("@/components/MapComponent"), {
   ssr: false,
@@ -48,15 +107,6 @@ const MapComponent = dynamic(() => import("@/components/MapComponent"), {
     </div>
   )
 });
-
-const REGION_NAMES: Record<string, string> = {
-  mumbai: "Mumbai Coast",
-  goa: "Goa Coast",
-  kochi: "Kochi Coast",
-  chennai: "Chennai Coast",
-  veraval: "Veraval / Gujarat Coast",
-  vizag: "Visakhapatnam Coast"
-};
 
 const REGION_RISK_SCORES: Record<string, number> = {
   mumbai: 18,
@@ -71,7 +121,7 @@ export default function HomeDashboard() {
   const alertsRef = useRef<HTMLDivElement>(null);
   const speciesRef = useRef<HTMLDivElement>(null);
   const { isOffline, lastSyncTime } = usePWA();
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
 
   const [selectedZone, setSelectedZone] = useState<any>(null);
   const [highlightedSpecies, setHighlightedSpecies] = useState(false);
@@ -85,6 +135,7 @@ export default function HomeDashboard() {
   const [dynamicAlerts, setDynamicAlerts] = useState<any[]>([]);
   const [activeLocation, setActiveLocation] = useState("mumbai");
   const [isUsingOfflineCache, setIsUsingOfflineCache] = useState(false);
+  const [simulatedImblAlert, setSimulatedImblAlert] = useState(false);
 
   // Chart Layers state synchronized with top toolbar Geofence control (default: all OFF)
   const [mapLayers, setMapLayers] = useState({
@@ -93,7 +144,8 @@ export default function HomeDashboard() {
     weatherSeaState: false,
     seaDepthContours: false,
     geologicalBorders: false,
-    safetyTrafficAlerts: false
+    safetyTrafficAlerts: false,
+    imblBoundary: true
   });
   
   // Community Reports states
@@ -107,7 +159,7 @@ export default function HomeDashboard() {
     lon: 72.80
   });
 
-  // Emergency SOS states
+  // Emergency SOS states & contact customizer
   const [isSosModalOpen, setIsSosModalOpen] = useState(false);
   const [isSosActive, setIsSosActive] = useState(false);
   const [sosSentTime, setSosSentTime] = useState("");
@@ -116,6 +168,12 @@ export default function HomeDashboard() {
   const [isSendingSms, setIsSendingSms] = useState(false);
   const [isResendingSms, setIsResendingSms] = useState(false);
   const [hasCopiedSms, setHasCopiedSms] = useState(false);
+  const [isSharingSms, setIsSharingSms] = useState(false);
+  const [isEditingRecipient, setIsEditingRecipient] = useState(false);
+  const [sosRecipientName, setSosRecipientName] = useState("");
+  const [sosRecipientPhone, setSosRecipientPhone] = useState("");
+  const [saveContactToProfile, setSaveContactToProfile] = useState(true);
+
   const [smsReceipt, setSmsReceipt] = useState<{
     status: string;
     delivery_status?: string;
@@ -127,12 +185,26 @@ export default function HomeDashboard() {
     vessel_name?: string;
     sms_text: string;
     maps_link: string;
+    direct_sms_uri?: string;
+    whatsapp_url?: string;
     lat?: number;
     lon?: number;
     timestamp: string;
     sos_id?: string;
     diagnostics?: any;
   } | null>(null);
+
+  // Synchronize contact name and phone from user profile
+  useEffect(() => {
+    if (user) {
+      if (!sosRecipientName) {
+        setSosRecipientName(user.emergency_contact_name || "Sunita Patil (Wife)");
+      }
+      if (!sosRecipientPhone) {
+        setSosRecipientPhone(user.emergency_contact_phone || "+91 98201 98765");
+      }
+    }
+  }, [user]);
 
   // Load telemetry from online API or fallback directly into IndexedDB
   const loadMapData = useCallback(async (loc: string) => {
@@ -151,7 +223,10 @@ export default function HomeDashboard() {
       setPfzs(data.pfzs || []);
       setHazards(data.hazards || []);
       setTideZones(data.tide_zones || []);
-      setVesselPath(data.vessel_path || []);
+      
+      // Use regional vessel path if available, or API path
+      const regionalPath = REGION_VESSEL_PATHS[loc] || data.vessel_path || [];
+      setVesselPath(regionalPath);
       setReports(data.reports || []);
       setIsUsingOfflineCache(false);
 
@@ -171,19 +246,11 @@ export default function HomeDashboard() {
         setHazards(cached.hazards || []);
         setTideZones(cached.tideZones || []);
         setReports(cached.reports || []);
-        if (loc === "mumbai") {
-          setVesselPath([
-            [18.940, 72.825],
-            [18.925, 72.820],
-            [18.910, 72.812],
-            [18.880, 72.780],
-            [18.840, 72.720],
-            [18.800, 72.650],
-            [18.760, 72.550],
-            [18.720, 72.480],
-            [18.700, 72.400]
-          ]);
-        }
+        const regionalPath = REGION_VESSEL_PATHS[loc] || REGION_VESSEL_PATHS.mumbai;
+        setVesselPath(regionalPath);
+      } else {
+        const regionalPath = REGION_VESSEL_PATHS[loc] || REGION_VESSEL_PATHS.mumbai;
+        setVesselPath(regionalPath);
       }
     }
   }, []);
@@ -322,8 +389,35 @@ export default function HomeDashboard() {
       });
     }
 
+    // 3. IMBL Proximity Threat Check
+    const actualProx = calculateDistanceToNearestIMBL(currentPos[0], currentPos[1]);
+    const prox = simulatedImblAlert
+      ? {
+          ...actualProx,
+          distanceNm: 3.42,
+          distanceKm: 6.33,
+          isAlert: true,
+          alertSeverity: "WARNING" as const,
+          threatMessage: `SENSITIVE BOUNDARY ALERT: Vessel is 3.42 NM (6.33 km) from ${actualProx.nearestBoundary.name}. Enforcing 5 NM maritime buffer protocol.`
+        }
+      : actualProx;
+
+    if (prox.isAlert) {
+      const isAuth = user?.role === "fisherman" || user?.role === "official";
+      newAlerts.unshift({
+        id: "imbl-boundary-alert",
+        title: `🛑 ${prox.alertSeverity}: Sensitive Maritime Boundary Alert (${prox.nearestBoundary.countryPair} IMBL)`,
+        message: `${prox.threatMessage} Distance: ${prox.distanceNm.toFixed(2)} NM (${prox.distanceKm.toFixed(2)} km). ${
+          isAuth 
+            ? `Exact Coordinates: ${currentPos[0].toFixed(5)}°N, ${currentPos[1].toFixed(5)}°E (Audit Logged).` 
+            : `Coordinates: ${currentPos[0].toFixed(2)}***°N, ${currentPos[1].toFixed(2)}***°E (Restricted).`
+        } Authorized maritime authorities notified.`,
+        severity: prox.alertSeverity === "CRITICAL" ? "DANGER" : "WARNING"
+      });
+    }
+
     setDynamicAlerts(newAlerts);
-  }, [vesselIndex, vesselPath, isSosActive, activeLocation, sosSentTime, sosRefId, user]);
+  }, [vesselIndex, vesselPath, isSosActive, activeLocation, sosSentTime, sosRefId, user, simulatedImblAlert]);
 
   function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
     const R = 6371;
@@ -419,6 +513,21 @@ export default function HomeDashboard() {
     }
   };
 
+  const cleanPhoneForE164 = (phone: string): string => {
+    const raw = String(phone || "").trim();
+    const digits = raw.replace(/\D/g, "");
+    if (raw.startsWith("+")) return `+${digits}`;
+    if (digits.length === 10) return `+91${digits}`;
+    if (digits.length === 11 && digits.startsWith("0")) return `+91${digits.slice(1)}`;
+    if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
+    if (digits.length > 10) return `+${digits}`;
+    return digits ? `+${digits}` : "+919820198765";
+  };
+
+  const cleanPhoneForWhatsApp = (phone: string): string => {
+    return cleanPhoneForE164(phone).replace(/\D/g, "");
+  };
+
   const triggerSosSignal = async () => {
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const refNum = "SOS-" + Math.floor(100000 + Math.random() * 900000);
@@ -428,17 +537,36 @@ export default function HomeDashboard() {
     setIsSosActive(true);
     setIsSendingSms(true);
 
-    const recipientName = user?.emergency_contact_name || "Sunita Patil (Wife)";
-    const recipientPhone = user?.emergency_contact_phone || "+91 98201 98765";
+    const recipientName = (sosRecipientName || user?.emergency_contact_name || "Sunita Patil (Wife)").trim();
+    const rawPhone = (sosRecipientPhone || user?.emergency_contact_phone || "+91 98201 98765").trim();
+    const formattedPhone = cleanPhoneForE164(rawPhone);
+    const waDigits = cleanPhoneForWhatsApp(formattedPhone);
     const senderName = user?.full_name || "Capt. Rajesh Patil";
     const vesselName = (user?.role_details as any)?.boat_name || (user?.role_details as any)?.department_name || (user?.role_details as any)?.institution_name || "Matsya Sagar IV";
     const lastLat = currentLat;
     const lastLon = currentLon;
     const regionName = REGION_NAMES[activeLocation] || "Indian Coast";
+    const mapsLink = `https://maps.google.com/?q=${lastLat.toFixed(5)},${lastLon.toFixed(5)}`;
+    const smsText = 
+      `🚨 [INNOWAVE MARITIME SOS ALERT]\n` +
+      `EMERGENCY: Captain ${senderName} (${vesselName}) has triggered an active SOS distress beacon at sea!\n` +
+      `📍 Last Known Location: ${lastLat.toFixed(5)}°N, ${lastLon.toFixed(5)}°E (${regionName})\n` +
+      `🗺️ Live Coordinates Map: ${mapsLink}\n` +
+      `⚠️ Danger Index: ${currentRisk}/100\n` +
+      `⏱️ Time: ${timestamp} (Ref: ${refNum})\n` +
+      `📡 Coast Guard Distress Helpline: 1554 / VHF CH 16\n` +
+      `Maritime SAR & Search teams have been alerted.`;
+
+    if (saveContactToProfile && updateProfile && (recipientName !== user?.emergency_contact_name || formattedPhone !== user?.emergency_contact_phone)) {
+      updateProfile({
+        emergency_contact_name: recipientName,
+        emergency_contact_phone: formattedPhone
+      }).catch(e => console.warn("Background profile save:", e));
+    }
 
     const payload = {
       recipient_name: recipientName,
-      recipient_phone: recipientPhone,
+      recipient_phone: formattedPhone,
       sender_name: senderName,
       vessel_name: vesselName,
       lat: lastLat,
@@ -468,34 +596,29 @@ export default function HomeDashboard() {
 
       if (res.ok) {
         const data = await res.json();
-        setSmsReceipt(data);
+        setSmsReceipt({
+          ...data,
+          direct_sms_uri: data.direct_sms_uri || `sms:${formattedPhone}?&body=${encodeURIComponent(data.sms_text || smsText)}`,
+          whatsapp_url: data.whatsapp_url || `https://api.whatsapp.com/send?phone=${waDigits}&text=${encodeURIComponent(data.sms_text || smsText)}`
+        });
       } else {
         throw new Error("SMS API error");
       }
     } catch (err) {
-      console.warn("Using offline / fallback emergency SMS generator:", err);
-      const mapsLink = `https://maps.google.com/?q=${lastLat.toFixed(5)},${lastLon.toFixed(5)}`;
-      const smsText = 
-        `🚨 [INNOWAVE MARITIME SOS ALERT]\n` +
-        `EMERGENCY: Captain ${senderName} (${vesselName}) has triggered an active SOS distress beacon at sea!\n` +
-        `📍 Last Known Location: ${lastLat.toFixed(5)}°N, ${lastLon.toFixed(5)}°E (${regionName})\n` +
-        `🗺️ Live Coordinates Map: ${mapsLink}\n` +
-        `⚠️ Danger Index: ${currentRisk}/100\n` +
-        `⏱️ Time: ${timestamp} (Ref: ${refNum})\n` +
-        `📡 Coast Guard Distress Helpline: 1554 / VHF CH 16\n` +
-        `Maritime SAR & Search teams have been alerted.`;
-
+      console.warn("Using offline / direct emergency SMS generator:", err);
       setSmsReceipt({
         status: "success",
-        delivery_status: "DELIVERED",
+        delivery_status: "DELIVERED (SIMULATED)",
         gateway_id: "SMS-GW-" + Math.floor(100000 + Math.random() * 900000),
         provider: "INNOWAVE Marine Cellular & Satellite SMS Gateway",
         recipient_name: recipientName,
-        recipient_phone: recipientPhone,
+        recipient_phone: formattedPhone,
         sender_name: senderName,
         vessel_name: vesselName,
         sms_text: smsText,
         maps_link: mapsLink,
+        direct_sms_uri: `sms:${formattedPhone}?&body=${encodeURIComponent(smsText)}`,
+        whatsapp_url: `https://api.whatsapp.com/send?phone=${waDigits}&text=${encodeURIComponent(smsText)}`,
         lat: lastLat,
         lon: lastLon,
         timestamp: timestamp,
@@ -506,22 +629,39 @@ export default function HomeDashboard() {
     }
   };
 
-  const resendSosLocationSms = async () => {
+  const resendSosLocationSms = async (customPhone?: string, customName?: string) => {
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const refNum = sosRefId || ("SOS-" + Math.floor(100000 + Math.random() * 900000));
     setIsResendingSms(true);
 
-    const recipientName = user?.emergency_contact_name || "Sunita Patil (Wife)";
-    const recipientPhone = user?.emergency_contact_phone || "+91 98201 98765";
+    const recipientName = (customName || sosRecipientName || user?.emergency_contact_name || "Sunita Patil (Wife)").trim();
+    const rawPhone = (customPhone || sosRecipientPhone || user?.emergency_contact_phone || "+91 98201 98765").trim();
+    const formattedPhone = cleanPhoneForE164(rawPhone);
+    const waDigits = cleanPhoneForWhatsApp(formattedPhone);
     const senderName = user?.full_name || "Capt. Rajesh Patil";
     const vesselName = (user?.role_details as any)?.boat_name || (user?.role_details as any)?.department_name || (user?.role_details as any)?.institution_name || "Matsya Sagar IV";
     const lastLat = currentLat;
     const lastLon = currentLon;
     const regionName = REGION_NAMES[activeLocation] || "Indian Coast";
+    const mapsLink = `https://maps.google.com/?q=${lastLat.toFixed(5)},${lastLon.toFixed(5)}`;
+    const smsText = 
+      `🚨 [INNOWAVE MARITIME SOS ALERT]\n` +
+      `EMERGENCY: Captain ${senderName} (${vesselName}) has triggered an active SOS distress beacon at sea!\n` +
+      `📍 Last Known Location: ${lastLat.toFixed(5)}°N, ${lastLon.toFixed(5)}°E (${regionName})\n` +
+      `🗺️ Live Coordinates Map: ${mapsLink}\n` +
+      `⚠️ Danger Index: ${currentRisk}/100\n` +
+      `⏱️ Time: ${timestamp} (Ref: ${refNum})\n` +
+      `📡 Coast Guard Distress Helpline: 1554 / VHF CH 16\n` +
+      `Maritime SAR & Search teams have been alerted.`;
+
+    if (customPhone) {
+      setSosRecipientPhone(formattedPhone);
+      if (customName) setSosRecipientName(recipientName);
+    }
 
     const payload = {
       recipient_name: recipientName,
-      recipient_phone: recipientPhone,
+      recipient_phone: formattedPhone,
       sender_name: senderName,
       vessel_name: vesselName,
       lat: lastLat,
@@ -549,35 +689,30 @@ export default function HomeDashboard() {
 
       if (res.ok) {
         const data = await res.json();
-        setSmsReceipt(data);
+        setSmsReceipt({
+          ...data,
+          direct_sms_uri: data.direct_sms_uri || `sms:${formattedPhone}?&body=${encodeURIComponent(data.sms_text || smsText)}`,
+          whatsapp_url: data.whatsapp_url || `https://api.whatsapp.com/send?phone=${waDigits}&text=${encodeURIComponent(data.sms_text || smsText)}`
+        });
         setSosSentTime(timestamp);
       } else {
         throw new Error("Resend failed");
       }
     } catch (e) {
       console.warn("Fallback resend SMS update:", e);
-      const mapsLink = `https://maps.google.com/?q=${lastLat.toFixed(5)},${lastLon.toFixed(5)}`;
-      const smsText = 
-        `🚨 [INNOWAVE MARITIME SOS ALERT]\n` +
-        `EMERGENCY: Captain ${senderName} (${vesselName}) has triggered an active SOS distress beacon at sea!\n` +
-        `📍 Last Known Location: ${lastLat.toFixed(5)}°N, ${lastLon.toFixed(5)}°E (${regionName})\n` +
-        `🗺️ Live Coordinates Map: ${mapsLink}\n` +
-        `⚠️ Danger Index: ${currentRisk}/100\n` +
-        `⏱️ Time: ${timestamp} (Ref: ${refNum})\n` +
-        `📡 Coast Guard Distress Helpline: 1554 / VHF CH 16\n` +
-        `Maritime SAR & Search teams have been alerted.`;
-
       setSmsReceipt({
         status: "success",
-        delivery_status: "DELIVERED",
+        delivery_status: "DELIVERED (SIMULATED)",
         gateway_id: "SMS-GW-" + Math.floor(100000 + Math.random() * 900000),
         provider: "INNOWAVE Marine Cellular & Satellite SMS Gateway",
         recipient_name: recipientName,
-        recipient_phone: recipientPhone,
+        recipient_phone: formattedPhone,
         sender_name: senderName,
         vessel_name: vesselName,
         sms_text: smsText,
         maps_link: mapsLink,
+        direct_sms_uri: `sms:${formattedPhone}?&body=${encodeURIComponent(smsText)}`,
+        whatsapp_url: `https://api.whatsapp.com/send?phone=${waDigits}&text=${encodeURIComponent(smsText)}`,
         lat: lastLat,
         lon: lastLon,
         timestamp: timestamp,
@@ -586,6 +721,29 @@ export default function HomeDashboard() {
       setSosSentTime(timestamp);
     } finally {
       setIsResendingSms(false);
+    }
+  };
+
+  const handleShareSos = async () => {
+    const text = smsReceipt?.sms_text || `🚨 INNOWAVE SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`;
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        setIsSharingSms(true);
+        await navigator.share({
+          title: "🚨 INNOWAVE MARITIME SOS ALERT",
+          text: text,
+          url: smsReceipt?.maps_link || `https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`
+        });
+      } catch (err: any) {
+        if (err?.name !== "AbortError") {
+          console.warn("Web share failed, copying instead:", err);
+          copySmsToClipboard(text);
+        }
+      } finally {
+        setIsSharingSms(false);
+      }
+    } else {
+      copySmsToClipboard(text);
     }
   };
 
@@ -649,6 +807,34 @@ export default function HomeDashboard() {
         </Link>
       </div>
 
+      {/* IMBL SENSITIVE BOUNDARY PROXIMITY ALERT BANNER (Requirements 1, 2, 3, 4, 5) */}
+      {(() => {
+        const currentPos = vesselPath[vesselIndex] || [18.940, 72.825];
+        const actualProx = calculateDistanceToNearestIMBL(currentPos[0], currentPos[1]);
+        const imblProximity: IMBLProximityResult = simulatedImblAlert
+          ? {
+              ...actualProx,
+              distanceNm: 3.42,
+              distanceKm: 6.33,
+              isAlert: true,
+              alertSeverity: "WARNING" as const,
+              threatMessage: `SENSITIVE BOUNDARY ALERT: Vessel is 3.42 NM (6.33 km) from ${actualProx.nearestBoundary.name}. Enforcing 5 NM maritime buffer protocol.`
+            }
+          : actualProx;
+
+        if (imblProximity.isAlert || simulatedImblAlert) {
+          return (
+            <ImblAlertBanner
+              proximity={imblProximity}
+              vesselCoords={currentPos}
+              activeLocation={activeLocation}
+              user={user}
+            />
+          );
+        }
+        return null;
+      })()}
+
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
@@ -662,8 +848,44 @@ export default function HomeDashboard() {
 
             {/* Top Toolbar Controls */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* Labeled Data Mode Toggle: Simulated | Live */}
+              {/* Labeled Data Mode Toggle: Offline | Live */}
               <DataModeToggle />
+
+              {/* IMBL Boundary Layer Toggle */}
+              <button
+                onClick={() => {
+                  setMapLayers(prev => ({
+                    ...prev,
+                    imblBoundary: !prev.imblBoundary
+                  }));
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all duration-200 border cursor-pointer ${
+                  mapLayers.imblBoundary
+                    ? "bg-red-100 text-red-900 border-red-300 shadow-sm ring-2 ring-red-400/40"
+                    : "bg-stone-50 text-slate-600 border-stone-200 hover:bg-stone-100"
+                }`}
+                title="Toggle International Maritime Boundary Lines (IMBL)"
+              >
+                <ShieldAlert className={`h-3.5 w-3.5 ${mapLayers.imblBoundary ? "text-red-700" : "text-slate-400"}`} />
+                <span>IMBL Layer</span>
+                {mapLayers.imblBoundary && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-600 ml-0.5" />
+                )}
+              </button>
+
+              {/* IMBL Proximity Simulation Toggle */}
+              <button
+                onClick={() => setSimulatedImblAlert(prev => !prev)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold transition-all duration-200 border cursor-pointer ${
+                  simulatedImblAlert
+                    ? "bg-red-600 text-white border-red-700 shadow-sm animate-pulse"
+                    : "bg-stone-50 text-slate-600 border-stone-200 hover:bg-stone-100"
+                }`}
+                title="Simulate IMBL Boundary Proximity Alert (3.42 NM)"
+              >
+                <Radio className="h-3 w-3" />
+                <span>{simulatedImblAlert ? "IMBL Alert Active" : "Test IMBL Alert"}</span>
+              </button>
 
               {/* Species Layer Toggle */}
               <button
@@ -1168,18 +1390,19 @@ export default function HomeDashboard() {
 
       {/* Fixed Emergency SOS Modal */}
       {isSosModalOpen && (
-        <div className="fixed inset-0 bg-[#0f172a]/35 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in text-slate-800">
-          <div className="bg-[#FAF8F5] border border-red-200 w-full max-w-md p-6 rounded-2xl shadow-xl flex flex-col gap-4">
+        <div className="fixed inset-0 bg-[#0f172a]/45 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in text-slate-800">
+          <div className="bg-[#FAF8F5] border border-red-200 w-full max-w-lg p-6 rounded-2xl shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
             
             {/* Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-stone-200">
+            <div className="flex items-center justify-between pb-2.5 border-b border-stone-200">
               <h3 className="font-extrabold text-red-700 text-sm flex items-center gap-2 font-sans tracking-wide">
-                <AlertCircle className="h-5 w-5 animate-pulse text-red-600" />
+                <AlertCircle className="h-5 w-5 animate-pulse text-red-600 flex-shrink-0" />
                 EMERGENCY DISTRESS SOS BROADCAST
               </h3>
               <button 
                 onClick={() => setIsSosModalOpen(false)}
-                className="text-slate-400 hover:text-slate-750 font-bold"
+                className="text-slate-400 hover:text-slate-700 font-bold p-1 rounded-lg hover:bg-stone-100 transition"
+                title="Close Modal"
               >
                 ✕
               </button>
@@ -1192,59 +1415,124 @@ export default function HomeDashboard() {
                 <div className="bg-red-50 border border-red-200 p-3.5 rounded-xl flex items-start gap-2.5">
                   <ShieldAlert className="text-red-600 h-5 w-5 flex-shrink-0 mt-0.5" />
                   <div>
-                    <h4 className="font-bold text-red-950 uppercase text-[10px] tracking-wider font-mono">DISTRESS BROADCAST & SMS WARNING</h4>
-                    <p className="text-red-750 text-[10.5px] leading-relaxed mt-0.5">
-                      Confirming this action will broadcast a distress emergency beacon to the Coast Guard and <strong>automatically send an emergency SMS with your live GPS location</strong> to your registered emergency contact.
+                    <h4 className="font-bold text-red-950 uppercase text-[10px] tracking-wider font-mono">DISTRESS BROADCAST & LIVE SMS WARNING</h4>
+                    <p className="text-red-800 text-[10.5px] leading-relaxed mt-0.5">
+                      Confirming will broadcast a distress beacon to the Coast Guard and <strong>automatically dispatch an emergency SMS with live GPS coordinates</strong> to your registered emergency contact.
                     </p>
                   </div>
                 </div>
 
                 {/* Telemetry metadata audit */}
-                <div className="bg-stone-50 border border-stone-200 p-4 rounded-xl space-y-2 font-mono">
-                  <div className="flex justify-between border-b border-stone-150 pb-1.5">
+                <div className="bg-stone-50 border border-stone-200 p-3.5 rounded-xl space-y-2 font-mono text-[11px]">
+                  <div className="flex justify-between border-b border-stone-200/80 pb-1.5">
                     <span className="text-slate-500">SOS Sector Target:</span>
                     <span className="text-blue-900 font-extrabold">{REGION_NAMES[activeLocation]}</span>
                   </div>
-                  <div className="flex justify-between border-b border-stone-150 pb-1.5">
+                  <div className="flex justify-between border-b border-stone-200/80 pb-1.5">
                     <span className="text-slate-500">Vessel Last Position:</span>
                     <span className="text-slate-800 font-extrabold flex items-center gap-1">
                       <MapPin className="h-3 w-3 text-red-600" />
                       {currentLat.toFixed(5)}°N, {currentLon.toFixed(5)}°E
                     </span>
                   </div>
-                  <div className="flex justify-between border-b border-stone-150 pb-1.5">
+                  <div className="flex justify-between border-b border-stone-200/80 pb-1.5">
                     <span className="text-slate-500">Regional Danger Score:</span>
                     <span className="text-red-700 font-extrabold">{currentRisk}/100</span>
                   </div>
-                  <div className="flex justify-between border-b border-stone-150 pb-1.5">
-                    <span className="text-slate-500">Emergency Protocol:</span>
+                  <div className="flex justify-between pb-0.5">
+                    <span className="text-slate-500">Distress Protocol:</span>
                     <span className="text-red-600 font-bold flex items-center gap-1">
                       <Radio className="h-3 w-3 animate-pulse" />
-                      AUTO-BEACON & SATELLITE SMS
+                      AUTO-BEACON + SATELLITE & CELLULAR SMS
                     </span>
-                  </div>
-                  {/* Emergency Contact from Signup */}
-                  <div className="bg-rose-50/90 p-2.5 rounded-lg border border-rose-200 space-y-1 mt-1">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-rose-900 font-bold flex items-center gap-1">
-                        <Smartphone className="h-3.5 w-3.5 text-rose-700" />
-                        SMS Recipient (from Signup):
-                      </span>
-                      <span className="text-slate-900 font-extrabold">{user?.emergency_contact_name || "Sunita Patil (Wife)"}</span>
-                    </div>
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-rose-800 font-semibold">Contact Phone:</span>
-                      <span className="text-rose-900 font-black tracking-wide font-mono">{user?.emergency_contact_phone || "+91 98201 98765"}</span>
-                    </div>
                   </div>
                 </div>
 
+                {/* Emergency Contact Box with Interactive Editing */}
+                <div className="bg-gradient-to-br from-rose-50 to-orange-50/70 p-3.5 rounded-xl border border-rose-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-rose-950 font-bold flex items-center gap-1.5 text-xs">
+                      <Smartphone className="h-4 w-4 text-rose-700" />
+                      Emergency SMS Recipient:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingRecipient(prev => !prev)}
+                      className="text-[10px] font-bold text-rose-800 hover:text-rose-950 bg-white/90 hover:bg-white border border-rose-300 px-2 py-0.5 rounded-lg flex items-center gap-1 shadow-2xs transition"
+                    >
+                      <Edit3 className="h-2.5 w-2.5" />
+                      {isEditingRecipient ? "Collapse" : "Change / Enter My Phone"}
+                    </button>
+                  </div>
+
+                  {isEditingRecipient ? (
+                    <div className="bg-white/95 p-3 rounded-xl border border-rose-300 space-y-2.5 animate-fade-in font-sans">
+                      <p className="text-[10.5px] text-slate-600 leading-snug">
+                        Enter your real mobile number below so that the distress SMS is sent directly to your phone:
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <label className="text-[9.5px] font-mono font-bold text-slate-500 uppercase block mb-1">Contact Name</label>
+                          <input
+                            type="text"
+                            value={sosRecipientName}
+                            onChange={(e) => setSosRecipientName(e.target.value)}
+                            placeholder="e.g. Sunita Patil / My Phone"
+                            className="w-full bg-stone-50 border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 outline-none focus:border-rose-600 focus:bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9.5px] font-mono font-bold text-slate-500 uppercase block mb-1">Mobile Number</label>
+                          <input
+                            type="tel"
+                            value={sosRecipientPhone}
+                            onChange={(e) => setSosRecipientPhone(e.target.value)}
+                            placeholder="e.g. 9820198765 or +91 98201 98765"
+                            className="w-full bg-stone-50 border border-stone-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-slate-900 outline-none focus:border-rose-600 focus:bg-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1 text-[10.5px]">
+                        <label className="flex items-center gap-1.5 text-slate-700 cursor-pointer font-medium">
+                          <input
+                            type="checkbox"
+                            checked={saveContactToProfile}
+                            onChange={(e) => setSaveContactToProfile(e.target.checked)}
+                            className="rounded text-rose-600 focus:ring-rose-500 h-3.5 w-3.5"
+                          />
+                          <span>Save as default emergency contact in profile</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingRecipient(false)}
+                          className="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2.5 py-1 rounded-lg text-[10px] flex items-center gap-1 shadow-2xs"
+                        >
+                          <Save className="h-3 w-3" />
+                          Done
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white/80 p-2.5 rounded-xl border border-rose-200/90 text-xs space-y-1">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 font-medium">Contact Name:</span>
+                        <strong className="text-slate-900">{sosRecipientName || user?.emergency_contact_name || "Sunita Patil (Wife)"}</strong>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 font-medium">Target Phone Number:</span>
+                        <span className="text-rose-900 font-black font-mono tracking-wide">{cleanPhoneForE164(sosRecipientPhone || user?.emergency_contact_phone || "+91 98201 98765")}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Confirm Dispatch Command */}
-                <div className="flex gap-3 mt-2">
+                <div className="flex gap-3 mt-1">
                   <button
                     type="button"
                     onClick={() => setIsSosModalOpen(false)}
-                    className="flex-1 bg-stone-100 hover:bg-stone-200 text-slate-700 py-3 rounded-xl font-bold transition duration-150"
+                    className="flex-1 bg-stone-100 hover:bg-stone-200 text-slate-700 py-3 rounded-xl font-bold transition duration-150 cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -1252,7 +1540,7 @@ export default function HomeDashboard() {
                     type="button"
                     onClick={triggerSosSignal}
                     disabled={isSendingSms}
-                    className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold transition duration-150 shadow-md border border-red-700 font-mono tracking-wide flex items-center justify-center gap-2"
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-bold transition duration-150 shadow-md border border-red-700 font-mono tracking-wide flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Send className="h-4 w-4" />
                     {isSendingSms ? "DISPATCHING SMS..." : "SEND SOS & SMS"}
@@ -1261,7 +1549,7 @@ export default function HomeDashboard() {
 
               </div>
             ) : (
-              <div className="flex flex-col gap-3 text-xs font-semibold text-center py-1 animate-fade-in">
+              <div className="flex flex-col gap-3.5 text-xs font-semibold text-center py-1 animate-fade-in">
                 
                 {/* Success Circle */}
                 <div className="mx-auto h-12 w-12 bg-red-100 rounded-full border border-red-300 flex items-center justify-center text-red-600 text-lg font-black animate-pulse">
@@ -1270,32 +1558,32 @@ export default function HomeDashboard() {
 
                 <div>
                   <h4 className="font-extrabold text-blue-950 text-base">SOS DISTRESS BEACON ACTIVE</h4>
-                  <p className="text-slate-500 mt-0.5 text-[11px] leading-relaxed max-w-[340px] mx-auto">
+                  <p className="text-slate-500 mt-0.5 text-[11px] leading-relaxed max-w-[360px] mx-auto">
                     Maritime distress alert broadcast to Coast Guard Sector <strong>{REGION_NAMES[activeLocation]}</strong> and emergency SMS dispatched to your contact.
                   </p>
                 </div>
 
                 {/* Emergency SMS Transmission Card */}
-                <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/60 border border-emerald-300/80 p-3.5 rounded-2xl text-left space-y-2 shadow-xs">
+                <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/70 border border-emerald-300/90 p-4 rounded-2xl text-left space-y-3 shadow-xs">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-emerald-900 font-extrabold text-[11.5px] uppercase tracking-wide">
+                    <div className="flex items-center gap-1.5 text-emerald-950 font-extrabold text-[12px] uppercase tracking-wide">
                       <Smartphone className="h-4 w-4 text-emerald-700" />
-                      Emergency SMS Dispatched
+                      Emergency Distress SMS
                     </div>
-                    <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold font-mono tracking-wider flex items-center gap-1 shadow-xs">
+                    <span className="text-[10px] bg-emerald-600 text-white px-2.5 py-0.5 rounded-full font-bold font-mono tracking-wider flex items-center gap-1 shadow-xs">
                       <span className="h-1.5 w-1.5 rounded-full bg-white animate-ping" />
                       {smsReceipt?.delivery_status || "DELIVERED"}
                     </span>
                   </div>
 
-                  <div className="text-[11px] space-y-1 font-mono text-slate-800 bg-white/85 p-2.5 rounded-xl border border-emerald-200">
+                  <div className="text-[11px] space-y-1.5 font-mono text-slate-800 bg-white/90 p-3 rounded-xl border border-emerald-200 shadow-2xs">
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Recipient (from Signup):</span>
-                      <strong className="text-slate-900 font-sans">{smsReceipt?.recipient_name || user?.emergency_contact_name || "Sunita Patil (Wife)"}</strong>
+                      <span className="text-slate-500">Recipient Contact:</span>
+                      <strong className="text-slate-900 font-sans">{smsReceipt?.recipient_name || sosRecipientName || user?.emergency_contact_name || "Emergency Contact"}</strong>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Contact Mobile:</span>
-                      <strong className="text-emerald-900 font-bold">{smsReceipt?.recipient_phone || user?.emergency_contact_phone || "+91 98201 98765"}</strong>
+                      <span className="text-slate-500">Recipient Mobile:</span>
+                      <strong className="text-emerald-900 font-bold">{smsReceipt?.recipient_phone || cleanPhoneForE164(sosRecipientPhone || user?.emergency_contact_phone || "+91 98201 98765")}</strong>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Gateway Provider:</span>
@@ -1314,9 +1602,82 @@ export default function HomeDashboard() {
                     </div>
                   </div>
 
-                  {/* SMS Text Preview with Copy */}
+                  {/* Direct Delivery Action Buttons (Ensures Receiver ALWAYS gets it) */}
+                  <div className="space-y-1.5 pt-0.5">
+                    <p className="text-[10px] text-emerald-950 font-bold uppercase tracking-wider font-mono">
+                      ⚡ Instant Receiver Direct Dispatch (1-Click):
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {/* WhatsApp 1-Click Dispatch */}
+                      <a
+                        href={smsReceipt?.whatsapp_url || `https://api.whatsapp.com/send?phone=${cleanPhoneForWhatsApp(smsReceipt?.recipient_phone || sosRecipientPhone || user?.emergency_contact_phone || "+91 98201 98765")}&text=${encodeURIComponent(smsReceipt?.sms_text || `🚨 INNOWAVE SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+                        title="Open WhatsApp chat directly to emergency contact with pre-filled SOS text"
+                      >
+                        <MessageCircle className="h-4 w-4 text-emerald-100" />
+                        <span>Send via WhatsApp</span>
+                      </a>
+
+                      {/* Device Native SMS App 1-Click Dispatch */}
+                      <a
+                        href={smsReceipt?.direct_sms_uri || `sms:${cleanPhoneForE164(smsReceipt?.recipient_phone || sosRecipientPhone || user?.emergency_contact_phone || "+91 98201 98765")}?&body=${encodeURIComponent(smsReceipt?.sms_text || `🚨 INNOWAVE SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`)}`}
+                        className="bg-blue-900 hover:bg-blue-850 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
+                        title="Open your device's native SMS application with pre-composed distress alert"
+                      >
+                        <PhoneCall className="h-4 w-4 text-blue-200" />
+                        <span>Open Phone SMS App</span>
+                      </a>
+                    </div>
+                  </div>
+
+                  {/* Secondary Actions: Map Coords, Web Share, Copy */}
+                  <div className="flex flex-wrap gap-2 pt-0.5">
+                    <a
+                      href={smsReceipt?.maps_link || `https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 bg-white hover:bg-slate-50 text-blue-950 border border-blue-200 py-1.5 px-2.5 rounded-xl text-[10.5px] font-bold flex items-center justify-center gap-1 shadow-2xs transition"
+                    >
+                      <MapPin className="h-3 w-3 text-red-600" />
+                      View Live Map
+                      <ExternalLink className="h-2.5 w-2.5 ml-0.5 opacity-60" />
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={handleShareSos}
+                      className="flex-1 bg-white hover:bg-slate-50 text-slate-800 border border-stone-300 py-1.5 px-2.5 rounded-xl text-[10.5px] font-bold flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                      title="Share SOS distress message via device share sheet"
+                    >
+                      <Share2 className="h-3 w-3 text-indigo-700" />
+                      {isSharingSms ? "Sharing..." : "Share Distress Alert"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => copySmsToClipboard(smsReceipt?.sms_text || `🚨 INNOWAVE SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`)}
+                      className="bg-white hover:bg-slate-50 text-emerald-850 border border-emerald-300 py-1.5 px-2.5 rounded-xl text-[10.5px] font-bold flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                      title="Copy full SMS text to clipboard"
+                    >
+                      {hasCopiedSms ? (
+                        <>
+                          <Check className="h-3 w-3 text-emerald-600" />
+                          <span>Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3 w-3 text-emerald-700" />
+                          <span>Copy Text</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* SMS Text Preview */}
                   <div className="relative">
-                    <div className="bg-slate-900 text-emerald-300 p-2.5 rounded-xl font-mono text-[10px] leading-relaxed border border-slate-800 max-h-28 overflow-y-auto whitespace-pre-line text-left">
+                    <div className="bg-slate-900 text-emerald-300 p-2.5 rounded-xl font-mono text-[10px] leading-relaxed border border-slate-800 max-h-24 overflow-y-auto whitespace-pre-line text-left">
                       {smsReceipt?.sms_text || (
                         `🚨 [INNOWAVE MARITIME SOS ALERT]\n` +
                         `EMERGENCY: Captain ${user?.full_name || "Capt. Rajesh Patil"} (${(user?.role_details as any)?.boat_name || "Matsya Sagar IV"}) has triggered an active SOS distress beacon at sea!\n` +
@@ -1327,72 +1688,61 @@ export default function HomeDashboard() {
                         `📡 Indian Coast Guard Helpline: 1554 / VHF CH 16`
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => copySmsToClipboard(smsReceipt?.sms_text || `🚨 INNOWAVE SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`)}
-                      className="absolute top-1.5 right-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 px-1.5 py-0.5 rounded text-[9px] font-mono flex items-center gap-1 cursor-pointer transition"
-                      title="Copy Emergency SMS text"
-                    >
-                      {hasCopiedSms ? (
-                        <>
-                          <Check className="h-2.5 w-2.5 text-emerald-400" />
-                          <span>Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-2.5 w-2.5" />
-                          <span>Copy</span>
-                        </>
-                      )}
-                    </button>
                   </div>
 
-                  {/* Interactive Action Buttons */}
-                  <div className="flex flex-wrap gap-2 pt-1">
-                    <a
-                      href={`https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 bg-white hover:bg-slate-50 text-blue-900 border border-blue-200 py-1.5 px-2.5 rounded-xl text-[10.5px] font-bold flex items-center justify-center gap-1 shadow-2xs transition"
-                    >
-                      <MapPin className="h-3 w-3 text-red-600" />
-                      View Live Map Coords
-                      <ExternalLink className="h-2.5 w-2.5 ml-0.5 opacity-60" />
-                    </a>
-
-                    <a
-                      href={`sms:${encodeURIComponent(smsReceipt?.recipient_phone || user?.emergency_contact_phone || "+91 98201 98765")}?body=${encodeURIComponent(smsReceipt?.sms_text || `🚨 INNOWAVE SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`)}`}
-                      className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white py-1.5 px-2.5 rounded-xl text-[10.5px] font-bold flex items-center justify-center gap-1 shadow-2xs transition"
-                    >
-                      <Smartphone className="h-3 w-3 text-emerald-200" />
-                      Open Device SMS App
-                    </a>
+                  {/* Quick Inline Re-send to New Number */}
+                  <div className="bg-white/90 border border-emerald-200 p-2.5 rounded-xl space-y-2 text-left font-sans">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10.5px] font-bold text-slate-700 flex items-center gap-1">
+                        <Phone className="h-3 w-3 text-emerald-700" />
+                        Send alert to another phone number:
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="tel"
+                        value={sosRecipientPhone}
+                        onChange={(e) => setSosRecipientPhone(e.target.value)}
+                        placeholder="e.g. 9820198765"
+                        className="flex-1 bg-stone-50 border border-stone-300 rounded-lg px-2.5 py-1 text-xs font-mono font-bold text-slate-900 outline-none focus:border-emerald-600 focus:bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => resendSosLocationSms(sosRecipientPhone, sosRecipientName)}
+                        disabled={isResendingSms}
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3 py-1 rounded-lg text-[10.5px] flex items-center gap-1 shadow-2xs transition cursor-pointer"
+                      >
+                        <Send className={`h-3 w-3 ${isResendingSms ? "animate-spin" : ""}`} />
+                        {isResendingSms ? "Sending..." : "Send"}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Diagnostics / Twilio Status Audit */}
                   {smsReceipt?.diagnostics && (
-                    <div className="bg-slate-100/80 border border-slate-200 p-2.5 rounded-xl text-[10px] font-mono space-y-1">
+                    <div className="bg-slate-100/90 border border-slate-200 p-2.5 rounded-xl text-[10px] font-mono space-y-1 text-left">
                       <div className="flex items-center justify-between text-slate-800 font-bold">
-                        <span>📡 Live SMS Gateway Diagnostics:</span>
+                        <span>📡 Gateway Delivery Diagnostics:</span>
                         <span className={smsReceipt.diagnostics.twilio_success ? "text-emerald-700 font-extrabold" : (smsReceipt.diagnostics.twilio_error_code ? "text-rose-700 font-extrabold" : "text-amber-700")}>
-                          {smsReceipt.diagnostics.twilio_success ? "TWILIO DISPATCHED" : (smsReceipt.diagnostics.twilio_error_code ? `TWILIO ERROR ${smsReceipt.diagnostics.twilio_error_code}` : "SIMULATION ACTIVE")}
+                          {smsReceipt.diagnostics.twilio_success ? "TWILIO DISPATCHED" : (smsReceipt.diagnostics.twilio_error_code ? `TWILIO [${smsReceipt.diagnostics.twilio_error_code}]` : "SIMULATION / DIRECT READY")}
                         </span>
                       </div>
                       <div className="text-slate-600 space-y-0.5 text-[9.5px]">
-                        <div>Formatted E.164 Phone: <strong className="text-slate-900">{smsReceipt.diagnostics.target_phone_formatted || smsReceipt.recipient_phone}</strong></div>
-                        <div>Twilio SID (Masked): <span className="text-slate-800">{smsReceipt.diagnostics.env_check?.account_sid_masked || "NOT SET"}</span></div>
-                        <div>Twilio Sender: <span className="text-slate-800">{smsReceipt.diagnostics.env_check?.phone_number_masked || "NOT SET"}</span></div>
+                        <div>Formatted E.164: <strong className="text-slate-900">{smsReceipt.diagnostics.target_phone_formatted || smsReceipt.recipient_phone}</strong></div>
                         {smsReceipt.diagnostics.twilio_sid && (
                           <div className="text-emerald-800 font-bold">Twilio Message SID: {smsReceipt.diagnostics.twilio_sid} (Status: {smsReceipt.diagnostics.twilio_status})</div>
                         )}
                         {smsReceipt.diagnostics.twilio_error_message && (
                           <div className="text-rose-800 font-semibold bg-rose-50 p-1.5 rounded-lg border border-rose-200 mt-1">
-                            ⚠️ Twilio Error [{smsReceipt.diagnostics.twilio_error_code || "FAIL"}]: {smsReceipt.diagnostics.twilio_error_message}
-                            {smsReceipt.diagnostics.twilio_more_info && (
-                              <a href={smsReceipt.diagnostics.twilio_more_info} target="_blank" rel="noreferrer" className="block text-blue-800 underline mt-0.5 font-bold">
-                                View Twilio Error Documentation ↗
-                              </a>
-                            )}
+                            ⚠️ Twilio Notice: {smsReceipt.diagnostics.twilio_error_message}
+                            <span className="block text-slate-600 font-normal mt-0.5">
+                              👉 Use the 1-Click WhatsApp or Device SMS buttons above to instantly deliver the emergency alert directly to the receiver's phone!
+                            </span>
+                          </div>
+                        )}
+                        {!smsReceipt.diagnostics.env_check?.all_credentials_set && (
+                          <div className="text-slate-600 bg-stone-50 p-1 rounded border border-stone-200 mt-1">
+                            ℹ️ Tip: Twilio / Fast2SMS API keys can be supplied in <code className="text-blue-900 font-bold">frontend/.env.local</code>. Direct 1-Click SMS & WhatsApp dispatch are always active.
                           </div>
                         )}
                       </div>
@@ -1402,12 +1752,12 @@ export default function HomeDashboard() {
                   {/* Re-broadcast updated coordinates button if vessel moves */}
                   <button
                     type="button"
-                    onClick={resendSosLocationSms}
+                    onClick={() => resendSosLocationSms()}
                     disabled={isResendingSms}
-                    className="w-full bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 py-1.5 px-2.5 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    className="w-full bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 py-2 px-2.5 rounded-xl text-[10.5px] font-bold flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
-                    <RefreshCw className={`h-3 w-3 text-amber-700 ${isResendingSms ? "animate-spin" : ""}`} />
-                    {isResendingSms ? "Re-dispatching updated SMS..." : `Re-send Updated Live Location SMS (${currentLat.toFixed(5)}°N, ${currentLon.toFixed(5)}°E)`}
+                    <RefreshCw className={`h-3.5 w-3.5 text-amber-700 ${isResendingSms ? "animate-spin" : ""}`} />
+                    {isResendingSms ? "Re-dispatching updated SMS..." : `Re-broadcast Updated GPS Location (${currentLat.toFixed(5)}°N, ${currentLon.toFixed(5)}°E)`}
                   </button>
                 </div>
 

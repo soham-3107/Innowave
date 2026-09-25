@@ -12,7 +12,12 @@ frontend/out/
 
 # Environment configurations and logs
 .env
-*.log
+.env.local
+*.env
+*.env.local
+backend/.env
+frontend/.env.local
+!*.env.example
 *.db
 .gemini/
 .system_generated/

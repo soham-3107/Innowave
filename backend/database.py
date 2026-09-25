@@ -37,6 +37,21 @@ def init_db():
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS data_access_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        user_email TEXT,
+        user_role TEXT NOT NULL,
+        action TEXT NOT NULL,
+        resource_type TEXT NOT NULL,
+        details TEXT,
+        ip_address TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+    """)
     conn.commit()
 
     # Check if demo users exist, if not seed them for instant testing
@@ -274,4 +289,71 @@ def update_user_profile(
     conn.close()
 
     return get_user_by_id(user_id)
+
+def log_data_access(
+    user_id: Optional[int],
+    user_email: Optional[str],
+    user_role: str,
+    action: str,
+    resource_type: str,
+    details: Optional[Dict[str, Any]] = None,
+    ip_address: Optional[str] = None
+) -> int:
+    """Logs an audit event into data_access_log table."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    details_str = json.dumps(details or {}) if isinstance(details, (dict, list)) else (str(details) if details else None)
+    
+    cursor.execute("""
+    INSERT INTO data_access_log (
+        user_id, user_email, user_role, action, resource_type, details, ip_address
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (
+        user_id,
+        user_email.strip().lower() if user_email else None,
+        user_role,
+        action,
+        resource_type,
+        details_str,
+        ip_address
+    ))
+    conn.commit()
+    log_id = cursor.lastrowid
+    conn.close()
+    return log_id
+
+def get_data_access_logs(limit: int = 50) -> list:
+    """Retrieves recent security access logs."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT * FROM data_access_log
+    ORDER BY created_at DESC
+    LIMIT ?
+    """, (limit,))
+    rows = cursor.fetchall()
+    conn.close()
+    
+    result = []
+    for r in rows:
+        details_parsed = {}
+        try:
+            if r["details"]:
+                details_parsed = json.loads(r["details"])
+        except Exception:
+            details_parsed = r["details"]
+        
+        result.append({
+            "id": r["id"],
+            "user_id": r["user_id"],
+            "user_email": r["user_email"],
+            "user_role": r["user_role"],
+            "action": r["action"],
+            "resource_type": r["resource_type"],
+            "details": details_parsed,
+            "ip_address": r["ip_address"],
+            "created_at": r["created_at"]
+        })
+    return result
+
 

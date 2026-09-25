@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Info, Radio, Activity } from "lucide-react";
+import { Info, Radio, Activity, WifiOff } from "lucide-react";
 
 interface DataModeToggleProps {
   compact?: boolean;
@@ -9,21 +9,26 @@ interface DataModeToggleProps {
 }
 
 export default function DataModeToggle({ compact = false, className = "" }: DataModeToggleProps) {
-  const [dataMode, setDataMode] = useState<"simulated" | "live">("simulated");
+  const [dataMode, setDataMode] = useState<"offline" | "live">("offline");
   const [showTooltip, setShowTooltip] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   // Initialize and sync across tabs/components
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("innowave-data-mode") || "simulated";
-      if (saved === "simulated" || saved === "live") {
+      const saved = localStorage.getItem("innowave-data-mode");
+      if (saved === "offline" || saved === "live") {
         setDataMode(saved);
+      } else if (saved === "simulated") {
+        setDataMode("offline");
+        localStorage.setItem("innowave-data-mode", "offline");
       }
 
       const handleModeChange = (e: any) => {
-        if (e.detail && (e.detail === "simulated" || e.detail === "live")) {
+        if (e.detail && (e.detail === "offline" || e.detail === "live")) {
           setDataMode(e.detail);
+        } else if (e.detail === "simulated") {
+          setDataMode("offline");
         }
       };
 
@@ -50,7 +55,7 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
     };
   }, [showTooltip]);
 
-  const handleSelectMode = (mode: "simulated" | "live") => {
+  const handleSelectMode = (mode: "offline" | "live") => {
     setDataMode(mode);
     if (typeof window !== "undefined") {
       localStorage.setItem("innowave-data-mode", mode);
@@ -69,8 +74,8 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
               <span>Data Mode</span>
             </div>
 
-            {/* Simulated Info Tooltip Trigger Icon */}
-            {dataMode === "simulated" && (
+            {/* Offline Info Tooltip Trigger Icon */}
+            {dataMode === "offline" && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -88,21 +93,21 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
             )}
           </div>
 
-          {/* Labeled Segmented Toggle: Simulated | Live */}
+          {/* Labeled Segmented Toggle: Offline | Live */}
           <div className="grid grid-cols-2 gap-1 p-0.5 bg-stone-100/90 rounded-lg border border-stone-200/60 text-[10px] font-mono">
             <button
               type="button"
-              onClick={() => handleSelectMode("simulated")}
+              onClick={() => handleSelectMode("offline")}
               onMouseEnter={() => setShowTooltip(true)}
               onMouseLeave={() => setShowTooltip(false)}
               className={`flex items-center justify-center gap-1.5 py-1 px-1.5 rounded-md transition-all font-semibold cursor-pointer ${
-                dataMode === "simulated"
+                dataMode === "offline"
                   ? "bg-white text-blue-950 font-bold shadow-xs border border-stone-200"
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${dataMode === "simulated" ? "bg-amber-500" : "bg-slate-300"}`} />
-              <span>Simulated</span>
+              <span className={`h-1.5 w-1.5 rounded-full ${dataMode === "offline" ? "bg-amber-500" : "bg-slate-300"}`} />
+              <span>Offline</span>
             </button>
 
             <button
@@ -130,17 +135,17 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
           <div className="flex items-center p-0.5 bg-stone-100/90 rounded-lg border border-stone-200/60 text-[11px] font-mono">
             <button
               type="button"
-              onClick={() => handleSelectMode("simulated")}
+              onClick={() => handleSelectMode("offline")}
               onMouseEnter={() => setShowTooltip(true)}
               onMouseLeave={() => setShowTooltip(false)}
               className={`flex items-center gap-1.5 py-0.5 px-2 rounded-md transition-all font-semibold cursor-pointer ${
-                dataMode === "simulated"
+                dataMode === "offline"
                   ? "bg-white text-blue-950 font-bold shadow-xs border border-stone-200"
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${dataMode === "simulated" ? "bg-amber-500" : "bg-slate-300"}`} />
-              <span>Simulated</span>
+              <span className={`h-1.5 w-1.5 rounded-full ${dataMode === "offline" ? "bg-amber-500" : "bg-slate-300"}`} />
+              <span>Offline</span>
             </button>
 
             <button
@@ -158,7 +163,7 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
           </div>
 
           {/* Info Tooltip Icon */}
-          {dataMode === "simulated" && (
+          {dataMode === "offline" && (
             <button
               type="button"
               onClick={(e) => {
@@ -178,7 +183,7 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
       )}
 
       {/* Floating Info Tooltip */}
-      {showTooltip && dataMode === "simulated" && (
+      {showTooltip && dataMode === "offline" && (
         <div
           ref={tooltipRef}
           className={`absolute z-50 ${compact ? "bottom-full left-0 mb-2 w-[210px]" : "top-full left-0 mt-2 w-72"} bg-slate-950/95 backdrop-blur-md text-slate-100 text-[11px] leading-relaxed p-3 rounded-xl shadow-2xl border border-slate-700/80 pointer-events-auto transition-opacity duration-200`}
@@ -186,9 +191,9 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-white mb-1">Telemetry Mode: Simulated</p>
+              <p className="font-semibold text-white mb-1">Telemetry Mode: Offline</p>
               <p className="text-slate-300 font-sans text-[11px] leading-snug">
-                Vessel telemetry simulated for demo. Production build connects to <span className="text-amber-300 font-semibold">[INCOIS / ISRO Bhuvan / NAVIC AIS feed]</span>.
+                Operating in offline mode using cached marine intelligence & local fallback. Switch to Live for real-time <span className="text-amber-300 font-semibold">[INCOIS / ISRO Bhuvan / NAVIC AIS feed]</span>.
               </p>
             </div>
           </div>

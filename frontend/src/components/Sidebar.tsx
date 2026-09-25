@@ -317,7 +317,7 @@ export default function Sidebar({ onOpenSettings, onCloseMobile, isMobile = fals
           </span>
         </div>
 
-        {/* Data Mode: Simulated | Live Labeled Toggle */}
+        {/* Data Mode: Offline | Live Labeled Toggle */}
         <DataModeToggle compact={true} />
       </div>
     </aside>

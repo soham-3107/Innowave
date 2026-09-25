@@ -15,6 +15,7 @@ import {
 } from "chart.js";
 import { Line, Bar } from "react-chartjs-2";
 import { BarChart3, Waves, Wind, Compass, Sparkles } from "lucide-react";
+import { COASTAL_REGIONS } from "@/data/coastalRegions";
 
 // Register Chart.js modules
 ChartJS.register(
@@ -364,12 +365,11 @@ export default function AnalyticsPage() {
             onChange={(e) => handleRegionChange(e.target.value)}
             className="bg-white border border-stone-300 rounded-xl px-4 py-2 text-xs md:text-sm font-bold text-blue-900 outline-none cursor-pointer focus:border-blue-900 shadow-sm"
           >
-            <option value="mumbai">Mumbai Coast</option>
-            <option value="goa">Goa Coast</option>
-            <option value="kochi">Kochi Coast</option>
-            <option value="chennai">Chennai Coast</option>
-            <option value="veraval">Veraval / Gujarat Coast</option>
-            <option value="vizag">Visakhapatnam Coast</option>
+            {COASTAL_REGIONS.map((r) => (
+              <option key={r.key} value={r.key}>
+                {r.name}
+              </option>
+            ))}
           </select>
         </div>
       </div>

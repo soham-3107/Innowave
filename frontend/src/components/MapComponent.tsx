@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Layers, X, ChevronDown, ChevronUp } from "lucide-react";
 import { REGION_SPECIES } from "@/data/speciesData";
+import { ALL_IMBL_BOUNDARIES, calculateDistanceToNearestIMBL } from "@/data/imblData";
 
 export interface ChartLayersState {
   fishingSuitability: boolean;
@@ -11,6 +12,7 @@ export interface ChartLayersState {
   seaDepthContours: boolean;
   geologicalBorders: boolean;
   safetyTrafficAlerts: boolean;
+  imblBoundary: boolean;
 }
 
 interface MapComponentProps {
@@ -148,14 +150,15 @@ export default function MapComponent({
   const mapClickCallbackRef = useRef<any>(null);
   const zoneSelectCallbackRef = useRef<any>(null);
 
-  // Internal layer state (default: all OFF)
+  // Internal layer state (default: IMBL active)
   const [internalLayers, setInternalLayers] = useState<ChartLayersState>({
     fishingSuitability: false,
     fishingGrounds: false,
     weatherSeaState: false,
     seaDepthContours: false,
     geologicalBorders: false,
-    safetyTrafficAlerts: false
+    safetyTrafficAlerts: false,
+    imblBoundary: true
   });
 
   const [isLayersOpen, setIsLayersOpen] = useState(false);
@@ -601,6 +604,88 @@ export default function MapComponent({
       }
 
       // ==========================================
+      // LAYER 7: International Maritime Boundary Lines (IMBL)
+      // ==========================================
+      if (activeLayers.imblBoundary) {
+        ALL_IMBL_BOUNDARIES.forEach(imbl => {
+          const polyline = L.polyline(imbl.coordinates, {
+            color: imbl.color,
+            weight: 3.5,
+            dashArray: imbl.dashArray,
+            opacity: 0.95
+          }).addTo(map);
+
+          polyline.bindPopup(`
+            <div class="p-1 font-sans text-xs max-w-[240px]">
+              <div class="flex items-center gap-1.5 text-red-700 font-black mb-1">
+                <span>🛑</span>
+                <span class="text-xs">${imbl.name}</span>
+              </div>
+              <p class="mb-1 text-slate-700"><strong>Sector:</strong> ${imbl.sector}</p>
+              <p class="mb-1 text-slate-700"><strong>Legal Protocol:</strong> ${imbl.treatyReference}</p>
+              <div class="bg-red-50 border border-red-200 text-red-800 p-1 rounded font-bold text-[10px]">
+                ⚠️ 5.0 NM Maritime Proximity Warning Buffer Enforced
+              </div>
+            </div>
+          `);
+
+          // Midpoint marker with persistent label
+          const midIndex = Math.floor(imbl.coordinates.length / 2);
+          const midPoint = imbl.coordinates[midIndex];
+          const labelMarker = L.circleMarker(midPoint, {
+            radius: 3,
+            color: "#b91c1c",
+            fillColor: "#ef4444",
+            fillOpacity: 1
+          }).addTo(map);
+
+          labelMarker.bindTooltip(`${imbl.countryPair} IMBL`, {
+            permanent: true,
+            direction: "top",
+            className: "custom-map-label-hazard"
+          }).openTooltip();
+
+          layersRef.current.push(polyline);
+          layersRef.current.push(labelMarker);
+        });
+
+        // Draw proximity line from vessel to nearest IMBL point if within alert range
+        if (vesselPath && vesselPath.length > 0 && vesselIndex < vesselPath.length) {
+          const currentPos = vesselPath[vesselIndex];
+          const proximity = calculateDistanceToNearestIMBL(currentPos[0], currentPos[1], 15.0);
+
+          if (proximity.distanceNm <= 10.0) {
+            const vectorLine = L.polyline([currentPos, proximity.nearestPoint], {
+              color: proximity.distanceNm <= 5.0 ? "#dc2626" : "#f59e0b",
+              weight: 2.5,
+              dashArray: "4, 4",
+              opacity: 0.9
+            }).addTo(map);
+
+            const midVector: [number, number] = [
+              (currentPos[0] + proximity.nearestPoint[0]) / 2,
+              (currentPos[1] + proximity.nearestPoint[1]) / 2
+            ];
+
+            const distMarker = L.circleMarker(midVector, {
+              radius: 2,
+              opacity: 0,
+              fillOpacity: 0
+            }).addTo(map);
+
+            distMarker.bindTooltip(`⚠️ ${proximity.distanceNm.toFixed(2)} NM to IMBL`, {
+              permanent: true,
+              direction: "center",
+              className: proximity.distanceNm <= 5.0 ? "custom-map-label-hazard" : "custom-map-label-corridor"
+            }).openTooltip();
+
+            layersRef.current.push(vectorLine);
+            layersRef.current.push(distMarker);
+          }
+        }
+      }
+
+      // ==========================================
       // PERMANENT BASE LAYERS (Vessel & Routes)
       // ==========================================
       if (vesselPath && vesselPath.length > 0 && vesselIndex < vesselPath.length) {
@@ -684,6 +769,12 @@ export default function MapComponent({
     dotColor: string;
   }[] = [
     {
+      key: "imblBoundary",
+      name: "International Boundary (IMBL)",
+      subtext: "India-Pak & India-Sri Lanka sensitive borders",
+      dotColor: "bg-red-500 border-red-600"
+    },
+    {
       key: "fishingSuitability",
       name: "Fishing Suitability",
       subtext: "Best modeled opportunity and species",
@@ -747,7 +838,7 @@ export default function MapComponent({
                 : "bg-blue-50 border border-blue-200 text-blue-950"
             }`}
           >
-            {activeCount}/6
+            {activeCount}/7
           </span>
           {isLayersOpen ? (
             <ChevronUp className="h-3.5 w-3.5 opacity-80" />
@@ -830,7 +921,8 @@ export default function MapComponent({
                     weatherSeaState: true,
                     seaDepthContours: true,
                     geologicalBorders: true,
-                    safetyTrafficAlerts: true
+                    safetyTrafficAlerts: true,
+                    imblBoundary: true
                   })
                 }
                 className="hover:text-blue-950 text-blue-900 font-bold transition-colors cursor-pointer"
@@ -846,7 +938,8 @@ export default function MapComponent({
                     weatherSeaState: false,
                     seaDepthContours: false,
                     geologicalBorders: false,
-                    safetyTrafficAlerts: false
+                    safetyTrafficAlerts: false,
+                    imblBoundary: false
                   })
                 }
                 className="hover:text-red-700 text-slate-500 transition-colors cursor-pointer"
@@ -862,7 +955,8 @@ export default function MapComponent({
                     weatherSeaState: false,
                     seaDepthContours: false,
                     geologicalBorders: false,
-                    safetyTrafficAlerts: false
+                    safetyTrafficAlerts: false,
+                    imblBoundary: true
                   })
                 }
                 className="hover:text-blue-950 text-slate-500 transition-colors cursor-pointer"

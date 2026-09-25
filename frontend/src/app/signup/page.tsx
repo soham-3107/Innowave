@@ -23,15 +23,7 @@ import {
   Sparkles
 } from "lucide-react";
 import { useAuth, UserRole } from "@/context/AuthContext";
-
-const REGIONS = [
-  { key: "mumbai", name: "Mumbai Coast (Arabian Sea)" },
-  { key: "goa", name: "Goa Coast (Arabian Sea)" },
-  { key: "kochi", name: "Kochi Coast (Arabian Sea)" },
-  { key: "chennai", name: "Chennai Coast (Bay of Bengal)" },
-  { key: "veraval", name: "Veraval / Gujarat Coast (Arabian Sea)" },
-  { key: "vizag", name: "Visakhapatnam Coast (Bay of Bengal)" }
-];
+import { COASTAL_REGIONS } from "@/data/coastalRegions";
 
 const GENDERS = [
   "Male",
@@ -422,9 +414,9 @@ export default function SignupPage() {
                       onChange={(e) => setDefaultRegion(e.target.value)}
                       className="w-full bg-[#FAF8F5] focus:bg-white text-xs font-bold text-blue-950 pl-9 pr-3.5 py-2.5 rounded-xl border border-stone-200 focus:border-blue-900 focus:outline-none focus:ring-1 focus:ring-blue-900/20 transition-all cursor-pointer font-sans"
                     >
-                      {REGIONS.map((r) => (
+                      {COASTAL_REGIONS.map((r) => (
                         <option key={r.key} value={r.key}>
-                          {r.name}
+                          {r.fullName}
                         </option>
                       ))}
                     </select>

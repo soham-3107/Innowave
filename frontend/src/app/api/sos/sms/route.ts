@@ -19,6 +19,10 @@ function formatE164Phone(phoneStr: string): string {
   // If 10 digits without country code, default to India (+91)
   if (digits.length === 10) {
     return `+91${digits}`;
+  } else if (digits.length === 11 && digits.startsWith("0")) {
+    return `+91${digits.slice(1)}`;
+  } else if (digits.length === 12 && digits.startsWith("91")) {
+    return `+${digits}`;
   } else if (digits.length > 10) {
     return `+${digits}`;
   } else {
@@ -26,11 +30,16 @@ function formatE164Phone(phoneStr: string): string {
   }
 }
 
+function getWhatsAppPhoneDigits(phoneStr: string): string {
+  const e164 = formatE164Phone(phoneStr);
+  return e164.replace(/\D/g, "");
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
-      recipient_name = "Emergency Kin",
+      recipient_name = "Emergency Contact",
       recipient_phone = "+91 98201 98765",
       sender_name = "Capt. Rajesh Patil",
       vessel_name = "Matsya Sagar IV",
@@ -56,11 +65,16 @@ export async function POST(req: NextRequest) {
       `📡 Coast Guard Distress Helpline: 1554 / VHF CH 16\n` +
       `Maritime SAR & Search teams have been alerted.`;
 
+    const formattedRecipient = formatE164Phone(recipient_phone);
+    const waDigits = getWhatsAppPhoneDigits(recipient_phone);
+    const direct_sms_uri = `sms:${formattedRecipient}?&body=${encodeURIComponent(sms_text)}`;
+    const whatsapp_url = `https://api.whatsapp.com/send?phone=${waDigits}&text=${encodeURIComponent(sms_text)}`;
+
     let provider = "INNOWAVE Marine Cellular & Satellite SMS Gateway";
     let gateway_id = `SMS-GW-${Math.floor(100000 + Math.random() * 900000)}`;
     let delivery_status = "DELIVERED (SIMULATED)";
 
-    // Step 4: Confirm environment variables at runtime with masked values
+    // Twilio environment check
     const twilioSid = (process.env.TWILIO_ACCOUNT_SID || "").trim();
     const twilioAuth = (process.env.TWILIO_AUTH_TOKEN || "").trim();
     const twilioFrom = (process.env.TWILIO_PHONE_NUMBER || "").trim();
@@ -86,7 +100,7 @@ export async function POST(req: NextRequest) {
         all_credentials_set: Boolean(twilioSid && twilioAuth && twilioFrom)
       },
       target_phone_raw: recipient_phone,
-      target_phone_formatted: null,
+      target_phone_formatted: formattedRecipient,
       twilio_attempted: false,
       twilio_success: false,
       twilio_sid: null,
@@ -94,12 +108,10 @@ export async function POST(req: NextRequest) {
       twilio_error_code: null,
       twilio_error_message: null,
       twilio_more_info: null,
-      http_status: null
+      http_status: null,
+      direct_sms_uri,
+      whatsapp_url
     };
-
-    // Step 1: Format and log exact recipient phone number right before sending
-    const formattedRecipient = formatE164Phone(recipient_phone);
-    diagnostics.target_phone_formatted = formattedRecipient;
 
     if (twilioSid && twilioAuth && twilioFrom) {
       diagnostics.twilio_attempted = true;
@@ -132,7 +144,6 @@ export async function POST(req: NextRequest) {
         const twData = await twilioRes.json().catch(() => ({}));
 
         if (twilioRes.ok) {
-          // Step 3: Log Twilio message SID and status immediately after success
           console.log(
             `[TWILIO-SUCCESS] Twilio SMS dispatched successfully!\n` +
             `  ✅ Message SID: ${twData.sid}\n` +
@@ -150,7 +161,6 @@ export async function POST(req: NextRequest) {
           diagnostics.twilio_status = twData.status;
           diagnostics.http_status = twilioRes.status;
         } else {
-          // Step 2: Log full Twilio exception including error code and message
           const errCode = twData.code;
           const errMsg = twData.message || twilioRes.statusText || "Twilio request failed";
           const errMore = twData.more_info || "";
@@ -172,7 +182,6 @@ export async function POST(req: NextRequest) {
           diagnostics.http_status = twilioRes.status;
         }
       } catch (ex: any) {
-        // Step 2: Catch network/client exception
         console.error(
           `[TWILIO-EXCEPTION] Exception during Twilio SMS dispatch:\n` +
           `  ❌ Type: ${ex?.name || "Error"}\n` +
@@ -188,7 +197,7 @@ export async function POST(req: NextRequest) {
         `  TWILIO_ACCOUNT_SID: ${maskedSid}\n` +
         `  TWILIO_AUTH_TOKEN: ${maskedAuth}\n` +
         `  TWILIO_PHONE_NUMBER: ${maskedFrom}\n` +
-        `  👉 To send live SMS, set these variables in Vercel or your local .env.`
+        `  👉 To send live SMS via Twilio, set these variables in .env.local or Vercel.`
       );
     }
 
@@ -227,11 +236,13 @@ export async function POST(req: NextRequest) {
       gateway_id,
       provider,
       recipient_name,
-      recipient_phone,
+      recipient_phone: formattedRecipient,
       sender_name,
       vessel_name,
       sms_text,
       maps_link,
+      direct_sms_uri,
+      whatsapp_url,
       lat: latNum,
       lon: lonNum,
       region,
