@@ -88,7 +88,7 @@ test_suite = [
         "query": "Can you explain why you recommended this fishing zone?",
         "expected_lang": "en",
         "expected_domain": "pfz_explanation",
-        "expected_keywords": ["Why INNOWAVE Recommended", "Satellite Ocean Color", "Thermal Upwelling"],
+        "expected_keywords": ["Why ORCA Recommended", "Satellite Ocean Color", "Thermal Upwelling"],
         "min_words": 60,
         "max_words": 300
     },

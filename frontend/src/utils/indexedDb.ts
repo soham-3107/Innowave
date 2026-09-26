@@ -1,5 +1,5 @@
 /**
- * INNOWAVE Marine Intelligence - IndexedDB Offline Storage Service
+ * ORCA Marine Intelligence - IndexedDB Offline Storage Service
  * Persists regional telemetry, PFZ coordinates, hazards, tides, species, risk scores, and safety alerts.
  */
 
@@ -81,7 +81,7 @@ export interface PendingReport {
   createdAt: number;
 }
 
-const DB_NAME = "innowave_marine_offline_db";
+const DB_NAME = "orca_marine_offline_db";
 const DB_VERSION = 1;
 const STORE_REGIONS = "coastal_regions";
 const STORE_META = "app_metadata";

@@ -21,7 +21,7 @@ if hasattr(sys.stderr, "reconfigure"):
 
 from agents.mock_data import MOCK_REGIONS, get_closest_region, COMMUNITY_REPORTS, GLOBAL_SPECIES_PROFILES
 
-logger = logging.getLogger("innowave_brain_agent")
+logger = logging.getLogger("orca_brain_agent")
 logger.setLevel(logging.INFO)
 
 def detect_language(text: str) -> str:
@@ -347,7 +347,7 @@ def construct_brain_system_prompt(lang: str = "en") -> str:
     """
     if lang == "hi":
         return (
-            "आप INNOWAVE के मुख्य ब्रेन एजेंट (Brain Agent) हैं - एक विशेषज्ञ समुद्री बुद्धिमत्ता और मत्स्य वैज्ञानिक सहायक।\n"
+            "आप ORCA के मुख्य ब्रेन एजेंट (Brain Agent) हैं - एक विशेषज्ञ समुद्री बुद्धिमत्ता और मत्स्य वैज्ञानिक सहायक।\n"
             "अनिवार्य नियम:\n"
             "1. सीधे और तथ्यात्मक रूप से उपयोगकर्ता के विशिष्ट प्रश्न का उत्तर दें। प्रश्न में पूछे गए विशेष विवरणों (स्थान, समय, प्रजाति, हवा आदि) का स्पष्ट संदर्भ लें, सामान्य स्थिति सारांश न दें।\n"
             "2. प्रत्येक उत्तर लगभग 150-250 शब्दों (4-6 ठोस वाक्य) का होना चाहिए। यदि प्रश्न हाँ/ना का है, तो भी 2-3 वाक्यों में उसका वैज्ञानिक कारण समझाएं।\n"
@@ -361,7 +361,7 @@ def construct_brain_system_prompt(lang: str = "en") -> str:
         )
     elif lang == "mr":
         return (
-            "तुम्ही INNOWAVE चे मुख्य ब्रेन एजंट (Brain Agent) आहात - एक तज्ज्ञ सागरी बुद्धिमत्ता आणि मत्स्य वैज्ञानिक सहाय्यक.\n"
+            "तुम्ही ORCA चे मुख्य ब्रेन एजंट (Brain Agent) आहात - एक तज्ज्ञ सागरी बुद्धिमत्ता आणि मत्स्य वैज्ञानिक सहाय्यक.\n"
             "अनिवार्य नियम:\n"
             "१. वापरकर्त्याच्या विशिष्ट प्रश्नाचे थेट आणि अचूक उत्तर द्या. सामान्य स्थिती सारांश देण्याऐवजी प्रश्नातील मुद्द्यांचा थेट उल्लेख करा.\n"
             "२. प्रत्येक उत्तर साधारणपणे १५०-२५० शब्दांचे (४-६ अर्थपूर्ण वाक्ये) असावे. प्रश्न हो/नाही स्वरूपाचा असला तरी २-३ वाक्यांत त्याचे वैज्ञानिक कारण सांगा.\n"
@@ -375,7 +375,7 @@ def construct_brain_system_prompt(lang: str = "en") -> str:
         )
     else:
         return (
-            "You are the Brain Agent for INNOWAVE, an expert collaborative marine intelligence and fisheries scientific copilot.\n"
+            "You are the Brain Agent for ORCA, an expert collaborative marine intelligence and fisheries scientific copilot.\n"
             "Strict Instructions:\n"
             "1. Directly answer the specific question asked, referencing the exact details and terminology in it, rather than giving a generic status summary.\n"
             "2. Aim for 150-250 words per response (roughly 4-6 sentences of substance) unless the question is a simple yes/no, in which case still provide 2-3 sentences of reasoning behind the verdict.\n"
@@ -837,8 +837,8 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
 
             elif intent == "pfz_explanation":
                 body = (
-                    f"🧠 **Multi-Agent Explanation: Why INNOWAVE Recommended This Fishing Zone**:\n\n"
-                    f"INNOWAVE selected this zone near **{reg_name_en}** through 5 verified scientific layers:\n\n"
+                    f"🧠 **Multi-Agent Explanation: Why ORCA Recommended This Fishing Zone**:\n\n"
+                    f"ORCA selected this zone near **{reg_name_en}** through 5 verified scientific layers:\n\n"
                     f"1. 🌿 **Satellite Ocean Color**: Chlorophyll-a density is evaluated at **{chloro_val} mg/m³**, indicating active diatom phytoplankton blooms.\n"
                     f"2. 🌡️ **Thermal Upwelling Front**: Sea surface temperature measures **{sst_val}°C**, identifying a nutrient-rich cold-water upwelling boundary.\n"
                     f"3. 🗺️ **Bathymetric Shelf Funneling**: Located along the {region_data['bathymetry']['shelf_width_km']} km continental shelf contour (depth: 25-60m) that naturally aggregates forage fish.\n"
@@ -1020,7 +1020,7 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
 
             elif intent == "pfz_explanation":
                 body = (
-                    f"🧠 **मल्टी-एजेंट स्पष्टीकरण: INNOWAVE ने इस मत्स्य क्षेत्र की सिफारिश क्यों की?**:\n\n"
+                    f"🧠 **मल्टी-एजेंट स्पष्टीकरण: ORCA ने इस मत्स्य क्षेत्र की सिफारिश क्यों की?**:\n\n"
                     f"१. 🌿 **प्रचुर क्लोरोफिल**: यहाँ क्लोरोफिल **{chloro_val} मि.ग्रा./घन मीटर** है, जो मछलियों का मुख्य भोजन है।\n"
                     f"२. 🌡️ **थर्मल अपवेलिंग**: यहाँ **{sst_val}°C** का तापमान पोषक तत्वों को सतह पर लाता है।\n"
                     f"३. 🗺️ **महाद्वीपीय शेल्फ**: 25-60 मीटर की शेल्फ ढलान मछलियों को प्राकृतिक रूप से एकत्र करती है।\n"
@@ -1141,7 +1141,7 @@ def run_agent_pipeline(query: str, client_lat: float = None, client_lon: float =
 
             elif intent == "pfz_explanation":
                 body = (
-                    f"🧠 **मल्टी-एजंट स्पष्टीकरण: INNOWAVE ने हे मासेमारी क्षेत्र का निवडले?**:\n\n"
+                    f"🧠 **मल्टी-एजंट स्पष्टीकरण: ORCA ने हे मासेमारी क्षेत्र का निवडले?**:\n\n"
                     f"१. 🌿 **प्लवक विपुलता**: येथे क्लोरोफिल **{chloro_val} mg/m³** असून माशांचे मुबलक खाद्य उपलब्ध आहे.\n"
                     f"२. 🌡️ **थर्मल अपवेलिंग**: **{sst_val}°C** तापमानाची थर्मल फ्रंट सीमा पोषक द्रव्ये वर आणते.\n"
                     f"३. 🗺️ **महाद्वीपीय शेल्फ**: २५-६० मीटरचा शेल्फ उतार माशांना नैसर्गिकरित्या एकत्र करतो.\n"

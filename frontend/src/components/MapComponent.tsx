@@ -693,7 +693,7 @@ export default function MapComponent({
         const boatMarker = L.marker(currentPos, { icon: boatIcon }).addTo(map);
         boatMarker.bindPopup(`
           <div class="p-1 font-sans text-xs text-slate-800">
-            <p class="font-bold text-blue-900 text-sm mb-1">User Vessel (INNOWAVE-1)</p>
+            <p class="font-bold text-blue-900 text-sm mb-1">User Vessel (ORCA-1)</p>
             <p>Coordinates: ${currentPos[0].toFixed(4)}, ${currentPos[1].toFixed(4)}</p>
             <button id="set-route-start" class="mt-2 bg-blue-900 hover:bg-blue-800 text-white font-bold py-1.5 px-3 rounded w-full transition duration-150 shadow-sm">
               Set Route Start
@@ -968,11 +968,11 @@ export default function MapComponent({
         )}
       </div>
 
-      {/* Bottom-Right: INNOWAVE Vessel Coordinates Telemetry */}
+      {/* Bottom-Right: ORCA Vessel Coordinates Telemetry */}
       <div className="absolute bottom-2 right-2 bg-white/95 border border-slate-200 px-3 py-2 rounded-lg z-20 text-xs font-mono max-w-[200px] shadow-md pointer-events-none text-slate-800">
         <div className="flex items-center gap-2 mb-1">
           <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block animate-pulse"></span>
-          <span className="text-blue-900 font-bold">INNOWAVE-1 Vessel Active</span>
+          <span className="text-blue-900 font-bold">ORCA-1 Vessel Active</span>
         </div>
         <div>
           Lat: {vesselPath[vesselIndex]?.[0].toFixed(4)}<br />

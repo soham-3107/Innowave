@@ -312,8 +312,8 @@ export async function POST(req: NextRequest) {
           `💡 **Tip**: Once in the PFZ, follow **diving seabirds** and depth sounders for the exact school location.`;
 
       } else if (intent === "pfz_explanation") {
-        finalAnswer = `🧠 **Multi-Agent Explanation: Why INNOWAVE Recommended This Fishing Zone**:\n\n` +
-          `INNOWAVE selected this zone near **${d.name}** through 5 verified scientific layers:\n\n` +
+        finalAnswer = `🧠 **Multi-Agent Explanation: Why ORCA Recommended This Fishing Zone**:\n\n` +
+          `ORCA selected this zone near **${d.name}** through 5 verified scientific layers:\n\n` +
           `1. 🌿 **Satellite Ocean Color**: Chlorophyll-a density is evaluated at **${chloro_val} mg/m³**, indicating active diatom phytoplankton blooms.\n` +
           `2. 🌡️ **Thermal Upwelling Front**: Sea surface temperature measures **${sst_val}°C**, identifying a nutrient-rich cold-water upwelling boundary.\n` +
           `3. 🗺️ **Bathymetric Shelf Funneling**: Located along the continental shelf contour (depth: 25-60m) that naturally aggregates forage fish.\n` +

@@ -6,8 +6,8 @@ import jwt
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "innowave_users.db")
-SECRET_KEY = os.environ.get("INNOWAVE_JWT_SECRET", "innowave-marine-intelligence-super-secret-key-2026")
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "orca_users.db")
+SECRET_KEY = os.environ.get("ORCA_JWT_SECRET", "orca-marine-intelligence-super-secret-key-2026")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 30
 
@@ -68,7 +68,7 @@ def init_db():
         """, (
             "Capt. Rajesh Patil",
             "+91 98201 54321",
-            "fisherman@innowave.in",
+            "fisherman@orca.in",
             "Male",
             "fisherman",
             "mumbai",
@@ -91,7 +91,7 @@ def init_db():
         """, (
             "Dr. Priya Nair",
             "+91 94470 12345",
-            "researcher@innowave.in",
+            "researcher@orca.in",
             "Female",
             "researcher",
             "kochi",
@@ -113,7 +113,7 @@ def init_db():
         """, (
             "Commander Vivek Sharma",
             "+91 98110 99887",
-            "official@innowave.in",
+            "official@orca.in",
             "Male",
             "official",
             "goa",

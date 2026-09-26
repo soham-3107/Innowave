@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
     // Official Maritime Boundary Violation Notice Text
     const sms_text = 
-      `🚨 [INNOWAVE IMBL SENSITIVE BOUNDARY ALERT]\n` +
+      `🚨 [ORCA IMBL SENSITIVE BOUNDARY ALERT]\n` +
       `ENFORCEMENT NOTICE: Vessel ${vessel_name} (${vessel_registration}) operated by ${operator_name} ` +
       `is within ${distNmNum.toFixed(2)} NM (${distKmNum.toFixed(2)} km) of ${boundary_name}.\n` +
       `📍 GPS Coords: ${latNum.toFixed(5)}°N, ${lonNum.toFixed(5)}°E (${region})\n` +
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       `⚠️ Threat Severity: ${alert_level}\n` +
       `📡 Maritime Rescue Coordination Centre (MRCC) & Coast Guard Operations Center alerted.`;
 
-    let provider = "INNOWAVE Marine Cellular & Satellite SMS Gateway";
+    let provider = "ORCA Marine Cellular & Satellite SMS Gateway";
     let gateway_id = `IMBL-GW-${Math.floor(100000 + Math.random() * 900000)}`;
     let delivery_status = "DELIVERED (SIMULATED)";
 

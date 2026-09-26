@@ -238,7 +238,7 @@ export default function HomeDashboard() {
         reports: data.reports || []
       });
     } catch (err) {
-      console.log(`[INNOWAVE PWA] Network unavailable. Loading cached data from IndexedDB for ${loc}...`, err);
+      console.log(`[ORCA PWA] Network unavailable. Loading cached data from IndexedDB for ${loc}...`, err);
       setIsUsingOfflineCache(true);
       const cached = await getCoastalRegionData(loc);
       if (cached) {
@@ -263,7 +263,7 @@ export default function HomeDashboard() {
   // Read shared location context and sync across tabs
   useEffect(() => {
     const updateLocationFromStorage = () => {
-      const saved = localStorage.getItem("innowave-active-location");
+      const saved = localStorage.getItem("orca-active-location");
       if (saved && REGION_NAMES[saved]) {
         setActiveLocation(saved);
       }
@@ -279,10 +279,10 @@ export default function HomeDashboard() {
       }
     };
 
-    window.addEventListener("innowave-location-changed", handleCustomLocation);
+    window.addEventListener("orca-location-changed", handleCustomLocation);
     window.addEventListener("storage", updateLocationFromStorage);
     return () => {
-      window.removeEventListener("innowave-location-changed", handleCustomLocation);
+      window.removeEventListener("orca-location-changed", handleCustomLocation);
       window.removeEventListener("storage", updateLocationFromStorage);
     };
   }, []);
@@ -291,7 +291,7 @@ export default function HomeDashboard() {
   useEffect(() => {
     if (user?.default_region && REGION_NAMES[user.default_region]) {
       setActiveLocation(user.default_region);
-      localStorage.setItem("innowave-active-location", user.default_region);
+      localStorage.setItem("orca-active-location", user.default_region);
     }
   }, [user?.default_region]);
 
@@ -373,7 +373,7 @@ export default function HomeDashboard() {
       newAlerts.push({
         id: "naval",
         title: "🚫 Restricted Waters Proximity Warning",
-        message: `Vessel INNOWAVE-1 is approaching Naval Dockyard Restricted limits. Distance: ${distToNaval.toFixed(2)} km. Keep clear.`,
+        message: `Vessel ORCA-1 is approaching Naval Dockyard Restricted limits. Distance: ${distToNaval.toFixed(2)} km. Keep clear.`,
         severity: "DANGER"
       });
     }
@@ -548,7 +548,7 @@ export default function HomeDashboard() {
     const regionName = REGION_NAMES[activeLocation] || "Indian Coast";
     const mapsLink = `https://maps.google.com/?q=${lastLat.toFixed(5)},${lastLon.toFixed(5)}`;
     const smsText = 
-      `🚨 [INNOWAVE MARITIME SOS ALERT]\n` +
+      `🚨 [ORCA MARITIME SOS ALERT]\n` +
       `EMERGENCY: Captain ${senderName} (${vesselName}) has triggered an active SOS distress beacon at sea!\n` +
       `📍 Last Known Location: ${lastLat.toFixed(5)}°N, ${lastLon.toFixed(5)}°E (${regionName})\n` +
       `🗺️ Live Coordinates Map: ${mapsLink}\n` +
@@ -610,7 +610,7 @@ export default function HomeDashboard() {
         status: "success",
         delivery_status: "DELIVERED (SIMULATED)",
         gateway_id: "SMS-GW-" + Math.floor(100000 + Math.random() * 900000),
-        provider: "INNOWAVE Marine Cellular & Satellite SMS Gateway",
+        provider: "ORCA Marine Cellular & Satellite SMS Gateway",
         recipient_name: recipientName,
         recipient_phone: formattedPhone,
         sender_name: senderName,
@@ -645,7 +645,7 @@ export default function HomeDashboard() {
     const regionName = REGION_NAMES[activeLocation] || "Indian Coast";
     const mapsLink = `https://maps.google.com/?q=${lastLat.toFixed(5)},${lastLon.toFixed(5)}`;
     const smsText = 
-      `🚨 [INNOWAVE MARITIME SOS ALERT]\n` +
+      `🚨 [ORCA MARITIME SOS ALERT]\n` +
       `EMERGENCY: Captain ${senderName} (${vesselName}) has triggered an active SOS distress beacon at sea!\n` +
       `📍 Last Known Location: ${lastLat.toFixed(5)}°N, ${lastLon.toFixed(5)}°E (${regionName})\n` +
       `🗺️ Live Coordinates Map: ${mapsLink}\n` +
@@ -704,7 +704,7 @@ export default function HomeDashboard() {
         status: "success",
         delivery_status: "DELIVERED (SIMULATED)",
         gateway_id: "SMS-GW-" + Math.floor(100000 + Math.random() * 900000),
-        provider: "INNOWAVE Marine Cellular & Satellite SMS Gateway",
+        provider: "ORCA Marine Cellular & Satellite SMS Gateway",
         recipient_name: recipientName,
         recipient_phone: formattedPhone,
         sender_name: senderName,
@@ -725,12 +725,12 @@ export default function HomeDashboard() {
   };
 
   const handleShareSos = async () => {
-    const text = smsReceipt?.sms_text || `🚨 INNOWAVE SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`;
+    const text = smsReceipt?.sms_text || `🚨 ORCA SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`;
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         setIsSharingSms(true);
         await navigator.share({
-          title: "🚨 INNOWAVE MARITIME SOS ALERT",
+          title: "🚨 ORCA MARITIME SOS ALERT",
           text: text,
           url: smsReceipt?.maps_link || `https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`
         });
@@ -1192,7 +1192,7 @@ export default function HomeDashboard() {
                     ? (user.role_details?.institution_name ? `RV ${user.role_details.institution_name.slice(0, 10).toUpperCase()}` : "RV SAGAR-KANYA")
                     : user?.role === "official"
                     ? (user.role_details?.department_name ? `ICG-${user.role_details.department_name.slice(0, 8).toUpperCase()}` : "ICG SAMARTH")
-                    : "INNOWAVE-1 (IND)"}
+                    : "ORCA-1 (IND)"}
                 </span>
               </div>
               {user?.role === "fisherman" && user.role_details?.home_port && (
@@ -1587,7 +1587,7 @@ export default function HomeDashboard() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Gateway Provider:</span>
-                      <span className="text-slate-700 font-bold">{smsReceipt?.provider || "INNOWAVE Marine Cellular & Satellite Gateway"}</span>
+                      <span className="text-slate-700 font-bold">{smsReceipt?.provider || "ORCA Marine Cellular & Satellite Gateway"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Gateway Ref:</span>
@@ -1610,7 +1610,7 @@ export default function HomeDashboard() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {/* WhatsApp 1-Click Dispatch */}
                       <a
-                        href={smsReceipt?.whatsapp_url || `https://api.whatsapp.com/send?phone=${cleanPhoneForWhatsApp(smsReceipt?.recipient_phone || sosRecipientPhone || user?.emergency_contact_phone || "+91 98201 98765")}&text=${encodeURIComponent(smsReceipt?.sms_text || `🚨 INNOWAVE SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`)}`}
+                        href={smsReceipt?.whatsapp_url || `https://api.whatsapp.com/send?phone=${cleanPhoneForWhatsApp(smsReceipt?.recipient_phone || sosRecipientPhone || user?.emergency_contact_phone || "+91 98201 98765")}&text=${encodeURIComponent(smsReceipt?.sms_text || `🚨 ORCA SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`)}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
@@ -1622,7 +1622,7 @@ export default function HomeDashboard() {
 
                       {/* Device Native SMS App 1-Click Dispatch */}
                       <a
-                        href={smsReceipt?.direct_sms_uri || `sms:${cleanPhoneForE164(smsReceipt?.recipient_phone || sosRecipientPhone || user?.emergency_contact_phone || "+91 98201 98765")}?&body=${encodeURIComponent(smsReceipt?.sms_text || `🚨 INNOWAVE SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`)}`}
+                        href={smsReceipt?.direct_sms_uri || `sms:${cleanPhoneForE164(smsReceipt?.recipient_phone || sosRecipientPhone || user?.emergency_contact_phone || "+91 98201 98765")}?&body=${encodeURIComponent(smsReceipt?.sms_text || `🚨 ORCA SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`)}`}
                         className="bg-blue-900 hover:bg-blue-850 text-white font-bold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer"
                         title="Open your device's native SMS application with pre-composed distress alert"
                       >
@@ -1657,7 +1657,7 @@ export default function HomeDashboard() {
 
                     <button
                       type="button"
-                      onClick={() => copySmsToClipboard(smsReceipt?.sms_text || `🚨 INNOWAVE SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`)}
+                      onClick={() => copySmsToClipboard(smsReceipt?.sms_text || `🚨 ORCA SOS: Last Known Location: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}`)}
                       className="bg-white hover:bg-slate-50 text-emerald-850 border border-emerald-300 py-1.5 px-2.5 rounded-xl text-[10.5px] font-bold flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
                       title="Copy full SMS text to clipboard"
                     >
@@ -1679,7 +1679,7 @@ export default function HomeDashboard() {
                   <div className="relative">
                     <div className="bg-slate-900 text-emerald-300 p-2.5 rounded-xl font-mono text-[10px] leading-relaxed border border-slate-800 max-h-24 overflow-y-auto whitespace-pre-line text-left">
                       {smsReceipt?.sms_text || (
-                        `🚨 [INNOWAVE MARITIME SOS ALERT]\n` +
+                        `🚨 [ORCA MARITIME SOS ALERT]\n` +
                         `EMERGENCY: Captain ${user?.full_name || "Capt. Rajesh Patil"} (${(user?.role_details as any)?.boat_name || "Matsya Sagar IV"}) has triggered an active SOS distress beacon at sea!\n` +
                         `📍 Last Known Location: ${currentLat.toFixed(5)}°N, ${currentLon.toFixed(5)}°E (${REGION_NAMES[activeLocation]})\n` +
                         `🗺️ Live Map: https://maps.google.com/?q=${currentLat.toFixed(5)},${currentLon.toFixed(5)}\n` +

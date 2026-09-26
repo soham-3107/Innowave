@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     const maps_link = `https://maps.google.com/?q=${latNum.toFixed(5)},${lonNum.toFixed(5)}`;
 
     const sms_text = 
-      `🚨 [INNOWAVE MARITIME SOS ALERT]\n` +
+      `🚨 [ORCA MARITIME SOS ALERT]\n` +
       `EMERGENCY: Captain ${sender_name} (${vessel_name}) has triggered an active SOS distress beacon at sea!\n` +
       `📍 Last Known Location: ${latNum.toFixed(5)}°N, ${lonNum.toFixed(5)}°E (${region})\n` +
       `🗺️ Live Coordinates Map: ${maps_link}\n` +
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     const direct_sms_uri = `sms:${formattedRecipient}?&body=${encodeURIComponent(sms_text)}`;
     const whatsapp_url = `https://api.whatsapp.com/send?phone=${waDigits}&text=${encodeURIComponent(sms_text)}`;
 
-    let provider = "INNOWAVE Marine Cellular & Satellite SMS Gateway";
+    let provider = "ORCA Marine Cellular & Satellite SMS Gateway";
     let gateway_id = `SMS-GW-${Math.floor(100000 + Math.random() * 900000)}`;
     let delivery_status = "DELIVERED (SIMULATED)";
 

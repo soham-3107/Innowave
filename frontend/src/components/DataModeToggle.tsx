@@ -16,12 +16,12 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
   // Initialize and sync across tabs/components
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("innowave-data-mode");
+      const saved = localStorage.getItem("orca-data-mode");
       if (saved === "offline" || saved === "live") {
         setDataMode(saved);
       } else if (saved === "simulated") {
         setDataMode("offline");
-        localStorage.setItem("innowave-data-mode", "offline");
+        localStorage.setItem("orca-data-mode", "offline");
       }
 
       const handleModeChange = (e: any) => {
@@ -32,10 +32,10 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
         }
       };
 
-      window.addEventListener("innowave-datamode-changed", handleModeChange);
+      window.addEventListener("orca-datamode-changed", handleModeChange);
 
       return () => {
-        window.removeEventListener("innowave-datamode-changed", handleModeChange);
+        window.removeEventListener("orca-datamode-changed", handleModeChange);
       };
     }
   }, []);
@@ -58,8 +58,8 @@ export default function DataModeToggle({ compact = false, className = "" }: Data
   const handleSelectMode = (mode: "offline" | "live") => {
     setDataMode(mode);
     if (typeof window !== "undefined") {
-      localStorage.setItem("innowave-data-mode", mode);
-      window.dispatchEvent(new CustomEvent("innowave-datamode-changed", { detail: mode }));
+      localStorage.setItem("orca-data-mode", mode);
+      window.dispatchEvent(new CustomEvent("orca-datamode-changed", { detail: mode }));
     }
   };
 

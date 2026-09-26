@@ -69,7 +69,7 @@ export default function OfflineSyncBanner() {
             <button
               onClick={installPWA}
               className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold px-2.5 py-1 rounded-lg text-xs shadow-xs transition-all cursor-pointer"
-              title="Install INNOWAVE to Home Screen"
+              title="Install ORCA to Home Screen"
             >
               <Download className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Install App</span>

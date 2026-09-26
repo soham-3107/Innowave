@@ -23,7 +23,7 @@ export default function Navbar() {
         </div>
         <div>
           <h1 className="font-extrabold text-xl tracking-wider text-blue-950">
-            INNOWAVE
+            ORCA
           </h1>
           <p className="text-[10px] text-slate-500 font-mono">Collaborative Marine Agent Network</p>
         </div>

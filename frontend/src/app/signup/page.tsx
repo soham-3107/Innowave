@@ -188,7 +188,7 @@ export default function SignupPage() {
             </div>
             <div className="text-left">
               <span className="font-extrabold text-2xl tracking-wider text-blue-950 font-sans block leading-none">
-                INNOWAVE
+                ORCA
               </span>
               <span className="text-[11px] text-slate-500 font-mono tracking-tight">
                 Autonomous Marine Intelligence Suite
@@ -375,7 +375,7 @@ export default function SignupPage() {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="rajesh.patil@innowave.in"
+                      placeholder="rajesh.patil@orca.in"
                       className="w-full bg-[#FAF8F5] focus:bg-white text-xs text-slate-900 pl-9 pr-3.5 py-2.5 rounded-xl border border-stone-200 focus:border-blue-900 focus:outline-none focus:ring-1 focus:ring-blue-900/20 transition-all font-sans"
                     />
                   </div>

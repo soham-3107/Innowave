@@ -1,9 +1,9 @@
 /**
- * INNOWAVE Marine Intelligence - Service Worker
+ * ORCA Marine Intelligence - Service Worker
  * Caches the complete Application Shell for offline zero-connectivity operations at sea.
  */
 
-const CACHE_NAME = "innowave-marine-shell-v1";
+const CACHE_NAME = "orca-marine-shell-v1";
 
 const APP_SHELL_ASSETS = [
   "/",
@@ -24,9 +24,9 @@ const APP_SHELL_ASSETS = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log("[INNOWAVE SW] Pre-caching Application Shell assets...");
+      console.log("[ORCA SW] Pre-caching Application Shell assets...");
       return cache.addAll(APP_SHELL_ASSETS).catch((err) => {
-        console.warn("[INNOWAVE SW] Some assets failed to pre-cache:", err);
+        console.warn("[ORCA SW] Some assets failed to pre-cache:", err);
       });
     }).then(() => self.skipWaiting())
   );
@@ -40,7 +40,7 @@ self.addEventListener("activate", (event) => {
         cacheNames
           .filter((name) => name !== CACHE_NAME)
           .map((name) => {
-            console.log("[INNOWAVE SW] Removing outdated cache:", name);
+            console.log("[ORCA SW] Removing outdated cache:", name);
             return caches.delete(name);
           })
       );
@@ -70,7 +70,7 @@ self.addEventListener("fetch", (event) => {
           return networkResponse;
         })
         .catch(async () => {
-          console.log("[INNOWAVE SW] Offline mode active: Serving cached page for", request.url);
+          console.log("[ORCA SW] Offline mode active: Serving cached page for", request.url);
           const cachedResponse = await caches.match(request);
           if (cachedResponse) {
             return cachedResponse;
@@ -81,7 +81,7 @@ self.addEventListener("fetch", (event) => {
             return rootCached;
           }
           return new Response(
-            `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>INNOWAVE Marine - Offline</title><style>body{font-family:sans-serif;background:#0B1528;color:#fff;text-align:center;padding:50px 20px;}h1{color:#38bdf8;}p{color:#94a3b8;}</style></head><body><h1>INNOWAVE Marine Intelligence (Offline)</h1><p>You are currently operating offshore with zero connectivity. Launching cached marine intelligence...</p><script>window.location.href="/";</script></body></html>`,
+            `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>ORCA Marine - Offline</title><style>body{font-family:sans-serif;background:#0B1528;color:#fff;text-align:center;padding:50px 20px;}h1{color:#38bdf8;}p{color:#94a3b8;}</style></head><body><h1>ORCA Marine Intelligence (Offline)</h1><p>You are currently operating offshore with zero connectivity. Launching cached marine intelligence...</p><script>window.location.href="/";</script></body></html>`,
             { headers: { "Content-Type": "text/html" } }
           );
         })

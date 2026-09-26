@@ -30,7 +30,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 
 interface Message {
-  sender: "user" | "innowave";
+  sender: "user" | "orca";
   text: string;
   timestamp: string;
 }
@@ -266,8 +266,8 @@ export default function CopilotPage() {
 
   const [messages, setMessages] = useState<Message[]>([
     {
-      sender: "innowave",
-      text: "Hello! I am INNOWAVE, your collaborative marine intelligence assistant. Ask me questions about ocean conditions, fish species, dockside market prices, gear recommendations, wave swells, tides, Coast Guard emergency helplines, or potential fishing zones near Mumbai, Goa, Kochi, Chennai, Veraval, or Vizag. You can speak to me in English, Hindi, or Marathi.",
+      sender: "orca",
+      text: "Hello! I am ORCA, your collaborative marine intelligence assistant. Ask me questions about ocean conditions, fish species, dockside market prices, gear recommendations, wave swells, tides, Coast Guard emergency helplines, or potential fishing zones near Mumbai, Goa, Kochi, Chennai, Veraval, or Vizag. You can speak to me in English, Hindi, or Marathi.",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     }
   ]);
@@ -1096,7 +1096,7 @@ export default function CopilotPage() {
       }
 
       setMessages(prev => [...prev, {
-        sender: "innowave",
+        sender: "orca",
         text: data.final_answer || data.text,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }]);
@@ -1106,7 +1106,7 @@ export default function CopilotPage() {
       setAgentAgreement(data.agent_agreement ?? null);
 
       if (data.region) {
-        localStorage.setItem("innowave-active-location", data.region);
+        localStorage.setItem("orca-active-location", data.region);
       }
 
     } catch (err) {
@@ -1115,7 +1115,7 @@ export default function CopilotPage() {
       const localResult = runLocalAgentSimulation(messageText);
 
       setMessages(prev => [...prev, {
-        sender: "innowave",
+        sender: "orca",
         text: localResult.final_answer,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }]);
@@ -1125,7 +1125,7 @@ export default function CopilotPage() {
       setAgentAgreement(localResult.agent_agreement ?? null);
 
       if (localResult.region) {
-        localStorage.setItem("innowave-active-location", localResult.region);
+        localStorage.setItem("orca-active-location", localResult.region);
       }
 
     } finally {
@@ -1351,7 +1351,7 @@ export default function CopilotPage() {
                 <div className={`flex items-center gap-2 mt-1 px-1 ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
                   <span className="text-[9px] text-slate-400 font-mono">{msg.timestamp}</span>
 
-                  {msg.sender === "innowave" && (
+                  {msg.sender === "orca" && (
                     <button
                       type="button"
                       onClick={() => toggleReadAloud(i, msg.text)}

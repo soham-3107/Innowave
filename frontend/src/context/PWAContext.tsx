@@ -68,7 +68,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
         const mapData = await mapRes.json();
         
         // Save to IndexedDB
-        const activeLoc = localStorage.getItem("innowave-active-location") || "mumbai";
+        const activeLoc = localStorage.getItem("orca-active-location") || "mumbai";
         await saveCoastalRegionData(activeLoc, {
           pfzs: mapData.pfzs || [],
           hazards: mapData.hazards || [],
@@ -113,7 +113,7 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
         throw new Error("API returned non-200");
       }
     } catch {
-      console.log("[INNOWAVE PWA] Backend sync check completed. Active online status:", typeof navigator !== "undefined" ? navigator.onLine : true);
+      console.log("[ORCA PWA] Backend sync check completed. Active online status:", typeof navigator !== "undefined" ? navigator.onLine : true);
       if (typeof navigator !== "undefined") {
         setIsOffline(!navigator.onLine);
       }
@@ -135,10 +135,10 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
       navigator.serviceWorker
         .register("/sw.js")
         .then((reg) => {
-          console.log("[INNOWAVE PWA] Service Worker registered successfully, scope:", reg.scope);
+          console.log("[ORCA PWA] Service Worker registered successfully, scope:", reg.scope);
         })
         .catch((err) => {
-          console.warn("[INNOWAVE PWA] Service Worker registration failed:", err);
+          console.warn("[ORCA PWA] Service Worker registration failed:", err);
         });
     }
 
@@ -164,25 +164,25 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
       e.preventDefault();
       setDeferredPrompt(e);
       setIsInstallable(true);
-      console.log("[INNOWAVE PWA] beforeinstallprompt event captured.");
+      console.log("[ORCA PWA] beforeinstallprompt event captured.");
     };
 
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setIsInstallable(false);
       setDeferredPrompt(null);
-      console.log("[INNOWAVE PWA] App was successfully installed!");
+      console.log("[ORCA PWA] App was successfully installed!");
     };
 
     // Network status listeners
     const handleOnline = () => {
-      console.log("[INNOWAVE PWA] Device is back ONLINE. Auto-syncing...");
+      console.log("[ORCA PWA] Device is back ONLINE. Auto-syncing...");
       setIsOffline(false);
       syncData();
     };
 
     const handleOffline = () => {
-      console.log("[INNOWAVE PWA] Device is OFFLINE. Engaging IndexedDB offline cache.");
+      console.log("[ORCA PWA] Device is OFFLINE. Engaging IndexedDB offline cache.");
       setIsOffline(true);
       setIsBannerDismissed(false);
     };
@@ -208,12 +208,12 @@ export function PWAProvider({ children }: { children: React.ReactNode }) {
   // Install PWA Trigger
   const installPWA = async () => {
     if (!deferredPrompt) {
-      alert("To install INNOWAVE to your home screen, open your browser menu and select 'Add to Home screen' or 'Install App'.");
+      alert("To install ORCA to your home screen, open your browser menu and select 'Add to Home screen' or 'Install App'.");
       return;
     }
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    console.log(`[INNOWAVE PWA] User install choice: ${outcome}`);
+    console.log(`[ORCA PWA] User install choice: ${outcome}`);
     if (outcome === "accepted") {
       setIsInstalled(true);
       setIsInstallable(false);

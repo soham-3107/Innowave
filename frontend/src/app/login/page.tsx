@@ -80,7 +80,7 @@ export default function LoginPage() {
             </div>
             <div className="text-left">
               <span className="font-extrabold text-2xl tracking-wider text-blue-950 font-sans block leading-none">
-                INNOWAVE
+                ORCA
               </span>
               <span className="text-[11px] text-slate-500 font-mono tracking-tight">
                 Autonomous Marine Intelligence Suite
@@ -119,7 +119,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@innowave.in"
+                  placeholder="name@orca.in"
                   className="w-full bg-[#FAF8F5] focus:bg-white text-xs text-slate-900 pl-10 pr-3.5 py-2.5 rounded-xl border border-stone-200 focus:border-blue-900 focus:outline-none focus:ring-1 focus:ring-blue-900/20 transition-all font-sans"
                 />
               </div>
@@ -190,7 +190,7 @@ export default function LoginPage() {
             <div className="grid grid-cols-1 gap-2">
               <button
                 type="button"
-                onClick={() => handleQuickDemoLogin("fisherman@innowave.in")}
+                onClick={() => handleQuickDemoLogin("fisherman@orca.in")}
                 className="w-full bg-[#FAF8F5] hover:bg-blue-50/70 border border-stone-200 hover:border-blue-300 p-2.5 rounded-xl text-left transition-all flex items-center justify-between group cursor-pointer shadow-2xs"
               >
                 <div className="flex items-center gap-2.5">
@@ -207,7 +207,7 @@ export default function LoginPage() {
 
               <button
                 type="button"
-                onClick={() => handleQuickDemoLogin("researcher@innowave.in")}
+                onClick={() => handleQuickDemoLogin("researcher@orca.in")}
                 className="w-full bg-[#FAF8F5] hover:bg-teal-50/70 border border-stone-200 hover:border-teal-300 p-2.5 rounded-xl text-left transition-all flex items-center justify-between group cursor-pointer shadow-2xs"
               >
                 <div className="flex items-center gap-2.5">
@@ -224,7 +224,7 @@ export default function LoginPage() {
 
               <button
                 type="button"
-                onClick={() => handleQuickDemoLogin("official@innowave.in")}
+                onClick={() => handleQuickDemoLogin("official@orca.in")}
                 className="w-full bg-[#FAF8F5] hover:bg-indigo-50/70 border border-stone-200 hover:border-indigo-300 p-2.5 rounded-xl text-left transition-all flex items-center justify-between group cursor-pointer shadow-2xs"
               >
                 <div className="flex items-center gap-2.5">

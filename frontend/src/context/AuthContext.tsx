@@ -67,11 +67,11 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 // Fallback demo accounts for instant testing / offline demo resilience
 const DEMO_USERS: Record<string, User> = {
-  "fisherman@innowave.in": {
+  "fisherman@orca.in": {
     id: 1,
     full_name: "Capt. Rajesh Patil",
     phone: "+91 98201 54321",
-    email: "fisherman@innowave.in",
+    email: "fisherman@orca.in",
     gender: "Male",
     role: "fisherman",
     default_region: "mumbai",
@@ -83,11 +83,11 @@ const DEMO_USERS: Record<string, User> = {
       home_port: "Sassoon Docks, Mumbai"
     }
   },
-  "researcher@innowave.in": {
+  "researcher@orca.in": {
     id: 2,
     full_name: "Dr. Priya Nair",
     phone: "+91 94470 12345",
-    email: "researcher@innowave.in",
+    email: "researcher@orca.in",
     gender: "Female",
     role: "researcher",
     default_region: "kochi",
@@ -98,11 +98,11 @@ const DEMO_USERS: Record<string, User> = {
       research_interest: "Pelagic Shoal Dynamics & Chlorophyll Front Convergence"
     }
   },
-  "official@innowave.in": {
+  "official@orca.in": {
     id: 3,
     full_name: "Commander Vivek Sharma",
     phone: "+91 98110 99887",
-    email: "official@innowave.in",
+    email: "official@orca.in",
     gender: "Male",
     role: "official",
     default_region: "goa",
@@ -126,8 +126,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
-        const savedToken = localStorage.getItem("innowave-auth-token");
-        const savedUserStr = localStorage.getItem("innowave-user");
+        const savedToken = localStorage.getItem("orca-auth-token");
+        const savedUserStr = localStorage.getItem("orca-user");
         if (savedToken && savedUserStr) {
           const parsedUser = JSON.parse(savedUserStr);
           setUser(parsedUser);
@@ -150,16 +150,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(newUser);
     setToken(newToken);
     if (typeof window !== "undefined") {
-      localStorage.setItem("innowave-auth-token", newToken);
-      localStorage.setItem("innowave-user", JSON.stringify(newUser));
+      localStorage.setItem("orca-auth-token", newToken);
+      localStorage.setItem("orca-user", JSON.stringify(newUser));
 
       // Sync user's default coastal region to active map location
       if (newUser.default_region) {
-        localStorage.setItem("innowave-active-location", newUser.default_region);
-        window.dispatchEvent(new CustomEvent("innowave-location-changed", { detail: newUser.default_region }));
+        localStorage.setItem("orca-active-location", newUser.default_region);
+        window.dispatchEvent(new CustomEvent("orca-location-changed", { detail: newUser.default_region }));
       }
 
-      window.dispatchEvent(new CustomEvent("innowave-auth-changed", { detail: newUser }));
+      window.dispatchEvent(new CustomEvent("orca-auth-changed", { detail: newUser }));
     }
   };
 
@@ -262,9 +262,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setToken(null);
     if (typeof window !== "undefined") {
-      localStorage.removeItem("innowave-auth-token");
-      localStorage.removeItem("innowave-user");
-      window.dispatchEvent(new CustomEvent("innowave-auth-changed", { detail: null }));
+      localStorage.removeItem("orca-auth-token");
+      localStorage.removeItem("orca-user");
+      window.dispatchEvent(new CustomEvent("orca-auth-changed", { detail: null }));
     }
     router.push("/login");
   };
@@ -274,7 +274,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const updatedUser = { ...user, default_region: region };
       setUser(updatedUser);
       if (typeof window !== "undefined") {
-        localStorage.setItem("innowave-user", JSON.stringify(updatedUser));
+        localStorage.setItem("orca-user", JSON.stringify(updatedUser));
       }
     }
   };

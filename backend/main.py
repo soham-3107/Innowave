@@ -49,7 +49,7 @@ def load_env_files():
 
 load_env_files()
 
-app = FastAPI(title="INNOWAVE Marine Intelligence API", version="2.0.0")
+app = FastAPI(title="ORCA Marine Intelligence API", version="2.0.0")
 
 # Initialize database schema on startup
 @app.on_event("startup")
@@ -145,7 +145,7 @@ class ImblNotifyRequest(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to INNOWAVE Marine Intelligence API"}
+    return {"message": "Welcome to ORCA Marine Intelligence API"}
 
 @app.post("/api/auth/signup")
 def signup_endpoint(req: SignupRequest):
@@ -312,7 +312,7 @@ import logging
 import urllib.error
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("innowave_sos")
+logger = logging.getLogger("orca_sos")
 
 def mask_credential(val: Optional[str], prefix_len: int = 4, suffix_len: int = 4) -> str:
     if not val:
@@ -559,10 +559,10 @@ def dispatch_live_sms(to_phone: str, message: str) -> dict:
             logger.warning(f"[FAST2SMS-ERROR] Fast2SMS dispatch note: {ex}")
 
     sim_id = f"SMS-GW-{random.randint(100000, 999999)}"
-    logger.info(f"[SMS-GATEWAY] Using resilient INNOWAVE simulated gateway receipt: {sim_id}")
+    logger.info(f"[SMS-GATEWAY] Using resilient ORCA simulated gateway receipt: {sim_id}")
 
     return {
-        "provider": "INNOWAVE Marine Cellular & Satellite SMS Gateway (Simulation)",
+        "provider": "ORCA Marine Cellular & Satellite SMS Gateway (Simulation)",
         "delivery_status": "DELIVERED (SIMULATED)",
         "gateway_id": sim_id,
         "diagnostics": diagnostics
@@ -576,7 +576,7 @@ def send_sos_sms_endpoint(req: SosSmsRequest):
     try:
         maps_link = f"https://maps.google.com/?q={req.lat:.5f},{req.lon:.5f}"
         sms_text = (
-            f"🚨 [INNOWAVE MARITIME SOS ALERT]\n"
+            f"🚨 [ORCA MARITIME SOS ALERT]\n"
             f"EMERGENCY: Captain {req.sender_name} ({req.vessel_name}) has triggered an active SOS distress beacon at sea!\n"
             f"📍 Last Known Location: {req.lat:.5f}°N, {req.lon:.5f}°E ({req.region})\n"
             f"🗺️ Live Coordinates Map: {maps_link}\n"
@@ -596,7 +596,7 @@ def send_sos_sms_endpoint(req: SosSmsRequest):
             "status": "success",
             "delivery_status": dispatch_result.get("delivery_status", "DELIVERED"),
             "gateway_id": dispatch_result.get("gateway_id", f"SMS-GW-{random.randint(100000, 999999)}"),
-            "provider": dispatch_result.get("provider", "INNOWAVE Marine Cellular & Satellite SMS Gateway"),
+            "provider": dispatch_result.get("provider", "ORCA Marine Cellular & Satellite SMS Gateway"),
             "recipient_name": req.recipient_name,
             "recipient_phone": formatted_phone,
             "sender_name": req.sender_name,
@@ -657,7 +657,7 @@ def notify_imbl_authorities_endpoint(req: ImblNotifyRequest):
     try:
         maps_link = f"https://maps.google.com/?q={req.lat:.5f},{req.lon:.5f}"
         sms_text = (
-            f"🚨 [INNOWAVE IMBL SENSITIVE BOUNDARY ALERT]\n"
+            f"🚨 [ORCA IMBL SENSITIVE BOUNDARY ALERT]\n"
             f"ENFORCEMENT NOTICE: Vessel {req.vessel_name} ({req.vessel_registration}) operated by {req.operator_name} "
             f"is in close proximity to {req.boundary_name} ({req.distance_nm:.2f} NM / {req.distance_km:.2f} km).\n"
             f"📍 GPS Coords: {req.lat:.5f}°N, {req.lon:.5f}°E ({req.region})\n"
@@ -692,7 +692,7 @@ def notify_imbl_authorities_endpoint(req: ImblNotifyRequest):
             "authorities_notified": True,
             "delivery_status": dispatch_result.get("delivery_status", "DELIVERED"),
             "gateway_id": dispatch_result.get("gateway_id", f"IMBL-GW-{random.randint(100000, 999999)}"),
-            "provider": dispatch_result.get("provider", "INNOWAVE Marine Cellular & Satellite SMS Gateway"),
+            "provider": dispatch_result.get("provider", "ORCA Marine Cellular & Satellite SMS Gateway"),
             "sms_text": sms_text,
             "authority_name": req.authority_name,
             "authority_phone": target_phone,

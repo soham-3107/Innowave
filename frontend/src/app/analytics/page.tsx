@@ -93,7 +93,7 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     const updateLocation = () => {
-      const saved = localStorage.getItem("innowave-active-location");
+      const saved = localStorage.getItem("orca-active-location");
       if (saved && ANALYTICS_DATA[saved]) {
         setSelectedRegion(saved);
       }
@@ -109,18 +109,18 @@ export default function AnalyticsPage() {
       }
     };
 
-    window.addEventListener("innowave-location-changed", handleCustomLocation);
+    window.addEventListener("orca-location-changed", handleCustomLocation);
     window.addEventListener("storage", updateLocation);
     return () => {
-      window.removeEventListener("innowave-location-changed", handleCustomLocation);
+      window.removeEventListener("orca-location-changed", handleCustomLocation);
       window.removeEventListener("storage", updateLocation);
     };
   }, []);
 
   const handleRegionChange = (val: string) => {
     setSelectedRegion(val);
-    localStorage.setItem("innowave-active-location", val);
-    window.dispatchEvent(new CustomEvent("innowave-location-changed", { detail: val }));
+    localStorage.setItem("orca-active-location", val);
+    window.dispatchEvent(new CustomEvent("orca-location-changed", { detail: val }));
   };
 
   const data = ANALYTICS_DATA[selectedRegion];

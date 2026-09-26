@@ -59,7 +59,7 @@ export default function Sidebar({ onOpenSettings, onCloseMobile, isMobile = fals
           isActive: pathname === "/" && !focusParam
         },
         {
-          label: "Ask INNOWAVE",
+          label: "Ask ORCA",
           href: "/copilot",
           icon: <MessageSquare className="h-4 w-4 flex-shrink-0" />,
           isActive: pathname === "/copilot"
@@ -95,7 +95,7 @@ export default function Sidebar({ onOpenSettings, onCloseMobile, isMobile = fals
       title: "Workspace",
       items: [
         ...(isInstallable && !isInstalled ? [{
-          label: "Install INNOWAVE App",
+          label: "Install ORCA App",
           href: "#",
           icon: <Download className="h-4 w-4 flex-shrink-0 text-amber-500 animate-bounce" />,
           isAction: true,
@@ -135,7 +135,7 @@ export default function Sidebar({ onOpenSettings, onCloseMobile, isMobile = fals
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="font-extrabold text-lg tracking-wider text-blue-950 font-sans">
-                  INNOWAVE
+                  ORCA
                 </span>
                 <span className="text-[9px] px-1.5 py-0.2 bg-blue-100 text-blue-900 rounded font-mono font-bold">
                   v2.4

@@ -3,13 +3,13 @@ import "./globals.css";
 import AppShell from "@/components/AppShell";
 
 export const metadata: Metadata = {
-  title: "INNOWAVE - Autonomous Marine Intelligence Assistant",
+  title: "ORCA - Autonomous Marine Intelligence Assistant",
   description: "Collaborative marine intelligence, PFZ fish radar, and weather safety copilot for fishermen and coastal operations",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "INNOWAVE Marine"
+    title: "ORCA Marine"
   },
   icons: {
     icon: [
@@ -44,7 +44,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="INNOWAVE Marine" />
+        <meta name="apple-mobile-web-app-title" content="ORCA Marine" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         
         {/* Leaflet CSS CDN */}

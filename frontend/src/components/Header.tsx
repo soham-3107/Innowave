@@ -38,7 +38,7 @@ import {
 
 const PAGE_NAMES: Record<string, string> = {
   "/": "Marine Map",
-  "/copilot": "Ask INNOWAVE (Copilot)",
+  "/copilot": "Ask ORCA (Copilot)",
   "/analytics": "Ocean Analytics",
   "/research": "Research Mode"
 };
@@ -100,22 +100,22 @@ export default function Header({ onToggleMobileDrawer, onOpenSettings }: HeaderP
 
   // Initialize and sync active location across tabs and components
   useEffect(() => {
-    const saved = localStorage.getItem("innowave-active-location");
+    const saved = localStorage.getItem("orca-active-location");
     if (saved && REGION_DATA[saved]) {
       setActiveLocation(saved);
     }
 
     const handleStorageChange = (e?: any) => {
-      const current = (e?.detail) || localStorage.getItem("innowave-active-location");
+      const current = (e?.detail) || localStorage.getItem("orca-active-location");
       if (current && REGION_DATA[current]) {
         setActiveLocation(current);
       }
     };
 
-    window.addEventListener("innowave-location-changed", handleStorageChange);
+    window.addEventListener("orca-location-changed", handleStorageChange);
     window.addEventListener("storage", handleStorageChange);
     return () => {
-      window.removeEventListener("innowave-location-changed", handleStorageChange);
+      window.removeEventListener("orca-location-changed", handleStorageChange);
       window.removeEventListener("storage", handleStorageChange);
     };
   }, []);
@@ -123,8 +123,8 @@ export default function Header({ onToggleMobileDrawer, onOpenSettings }: HeaderP
   const handleLocationSelect = (locKey: string) => {
     if (!REGION_DATA[locKey]) return;
     setActiveLocation(locKey);
-    localStorage.setItem("innowave-active-location", locKey);
-    window.dispatchEvent(new CustomEvent("innowave-location-changed", { detail: locKey }));
+    localStorage.setItem("orca-active-location", locKey);
+    window.dispatchEvent(new CustomEvent("orca-location-changed", { detail: locKey }));
     setIsSearchOpen(false);
     setSearchQuery("");
     if (searchInputRef.current) {
@@ -215,7 +215,7 @@ export default function Header({ onToggleMobileDrawer, onOpenSettings }: HeaderP
           <button
             onClick={installPWA}
             className="flex items-center gap-1.5 bg-gradient-to-r from-blue-900 to-indigo-900 hover:from-blue-800 hover:to-indigo-800 text-white font-bold px-2.5 py-1.2 rounded-xl text-xs shadow-xs hover:shadow transition-all cursor-pointer border border-blue-700/50"
-            title="Install INNOWAVE to Home Screen for Offline Offshore Access"
+            title="Install ORCA to Home Screen for Offline Offshore Access"
           >
             <Download className="h-3.5 w-3.5 text-amber-300 animate-bounce" />
             <span className="hidden sm:inline">Install App</span>

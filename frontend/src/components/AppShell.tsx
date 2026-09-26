@@ -56,7 +56,7 @@ function AppShellInner({ children }: AppShellProps) {
             <Compass className="h-8 w-8 text-white animate-spin-slow" />
           </div>
           <div className="space-y-1">
-            <h2 className="text-lg font-black text-blue-950 tracking-wider font-sans">INNOWAVE</h2>
+            <h2 className="text-lg font-black text-blue-950 tracking-wider font-sans">ORCA</h2>
             <p className="text-xs text-slate-400 font-mono">Initializing Marine Intelligence...</p>
           </div>
         </div>
@@ -73,7 +73,7 @@ function AppShellInner({ children }: AppShellProps) {
             <Compass className="h-8 w-8 text-white animate-spin-slow" />
           </div>
           <div className="space-y-1">
-            <h2 className="text-lg font-black text-blue-950 tracking-wider font-sans">INNOWAVE</h2>
+            <h2 className="text-lg font-black text-blue-950 tracking-wider font-sans">ORCA</h2>
             <p className="text-xs text-slate-500 font-mono">Please sign in to access your marine dashboard...</p>
           </div>
         </div>
